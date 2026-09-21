@@ -80,6 +80,18 @@ describe('seed do primeiro admin', () => {
     expect(await seedFirstAdmin(app.prisma, env, app.log)).toBe(false);
   });
 
+  it('e-mail inválido no .env não derruba a API: só não cria o admin', async () => {
+    const admins = await app.prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+    await app.prisma.user.updateMany({ where: { role: 'ADMIN' }, data: { role: 'MEMBER' } });
+    try {
+      const env = testEnv({ SEED_ADMIN_EMAIL: 'SEU_EMAIL', SEED_ADMIN_PASSWORD: 'senha-inicial-123' });
+      await expect(seedFirstAdmin(app.prisma, env, app.log)).resolves.toBe(false);
+      expect(await app.prisma.user.count({ where: { role: 'ADMIN' } })).toBe(0);
+    } finally {
+      await app.prisma.user.updateMany({ where: { id: { in: admins.map((a) => a.id) } }, data: { role: 'ADMIN' } });
+    }
+  });
+
   it('cria admin com troca obrigatória quando não existe nenhum', async () => {
     const admins = await app.prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
     await app.prisma.user.updateMany({ where: { role: 'ADMIN' }, data: { role: 'MEMBER' } });

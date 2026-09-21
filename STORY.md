@@ -28,7 +28,23 @@
 - **Fase:** MVP (PRD-001/SPEC-001) **implementado e testado**; ainda não publicado na VPS.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** primeiro deploy na VPS (ver pendências abaixo) e PRD de backup do banco antes de liberar para a equipe.
+- **Próximo passo:** concluir o primeiro deploy na VPS (build ok; falta o admin inicial) e PRD de backup do banco antes de liberar para a equipe.
+
+---
+
+## 2026-09-21 — Correção: seed do admin inválido não derruba mais a API
+**Tipo:** fix
+**Refs:** SPEC-001 §3.2
+
+**O que mudou**
+- No primeiro deploy na VPS, um `SEED_ADMIN_EMAIL` inválido (placeholder do exemplo) fazia a API cair em loop de restart com um `ZodError`. Agora a API sobe normalmente e loga em português o que corrigir no `.env` ("admin inicial NÃO criado — …").
+- Deploy na VPS confirmado até aqui: build das imagens ok, Postgres saudável, migrations aplicadas, rede `traefik_default`.
+
+**Revisão de segurança**
+- Sem mudança de superfície; o log não inclui o valor das variáveis (só qual está inválida). Teste novo cobre o caso.
+
+**Pendências / próximos passos**
+- [ ] Concluir o primeiro deploy: corrigir `SEED_ADMIN_EMAIL`, subir, fazer o 1º login e apagar `SEED_ADMIN_PASSWORD` do `.env`.
 
 ---
 
