@@ -1,0 +1,16 @@
+# Desenvolvimento local: só o Postgres. A api e o web rodam com `pnpm dev`.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: diagram_dev_postgres
+    environment:
+      POSTGRES_USER: diagram
+      POSTGRES_PASSWORD: diagram
+      POSTGRES_DB: diagram
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - diagram_dev_pgdata:/var/lib/postgresql/data
+
+volumes:
+  diagram_dev_pgdata:

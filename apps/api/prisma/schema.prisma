@@ -1,0 +1,111 @@
+// Modelo de dados do Paglamp Diagram — SPEC-001 §2.1.
+// Formato do conteúdo do documento (yState): ADR-002 / SPEC-001 §2.2.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum DocumentType {
+  MINDMAP
+  DIAGRAM
+}
+
+enum MemberRole {
+  OWNER
+  EDITOR
+  COMMENTER
+  VIEWER
+}
+
+model User {
+  id                 String           @id @default(cuid())
+  /// Sempre minúsculo e sem espaços.
+  email              String           @unique
+  name               String
+  role               UserRole         @default(MEMBER)
+  passwordHash       String
+  mustChangePassword Boolean          @default(true)
+  /// Usuário nunca é apagado, só desativado.
+  active             Boolean          @default(true)
+  failedLoginCount   Int              @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  sessions           Session[]
+  memberships        DocumentMember[]
+  ownedDocuments     Document[]       @relation("owner")
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  /// SHA-256 do token. O token em si nunca é salvo.
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+  ip         String?
+  userAgent  String?
+
+  @@index([userId])
+}
+
+model Document {
+  id             String           @id @default(cuid())
+  type           DocumentType     @default(MINDMAP)
+  title          String
+  ownerId        String
+  owner          User             @relation("owner", fields: [ownerId], references: [id])
+  /// Estado binário do Y.Doc.
+  yState         Bytes?
+  /// Texto dos nós (até 10k chars), para busca.
+  searchText     String           @default("")
+  sizeBytes      Int              @default(0)
+  trashedAt      DateTime?
+  lastEditedById String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  members        DocumentMember[]
+
+  @@index([ownerId, trashedAt])
+  @@index([trashedAt])
+}
+
+model DocumentMember {
+  documentId String
+  userId     String
+  role       MemberRole
+  addedById  String?
+  createdAt  DateTime   @default(now())
+  document   Document   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, userId])
+  @@index([userId])
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  actorId   String?
+  /// ex.: auth.login, auth.login_failed, user.created, document.shared
+  action    String
+  targetId  String?
+  /// Nunca senha, token ou conteúdo de documento.
+  meta      Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

@@ -1,0 +1,130 @@
+# Produção (VPS). Traefik já roda no host, com a rede externa `traefik` e o
+# cert resolver `leresolver`. Deploy: `git pull && docker compose up -d --build`.
+#
+# Roteamento em ${DIAGRAM_DOMAIN} (CLAUDE.md §10):
+#   /api/*, /collab/*  -> api (3001)   prioridade 100
+#   todo o resto       -> web (8080)   prioridade 10
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: diagram_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-diagram}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD obrigatoria — defina no .env da VPS}
+      POSTGRES_DB: ${POSTGRES_DB:-diagram}
+    volumes:
+      - diagram_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-diagram} -d ${POSTGRES_DB:-diagram}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # Sem `ports:` de propósito — o banco não fica exposto no host.
+    networks: [diagram_net]
+
+  # Reinicia containers com label `autoheal=true` cujo healthcheck falhe
+  # (o Compose sozinho só reinicia em crash, não em travamento).
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    container_name: diagram_autoheal
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: 30
+      AUTOHEAL_START_PERIOD: 60
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: diagram_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-diagram}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD obrigatoria}@postgres:5432/${POSTGRES_DB:-diagram}?schema=public
+      APP_URL: https://${DIAGRAM_DOMAIN:-diagram.paglamp.com.br}
+      # Gere com `openssl rand -base64 48`.
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET obrigatoria — defina no .env da VPS}
+      # Vazio = qualquer e-mail (os acessos são criados pelo admin — ADR-003).
+      ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
+      TRASH_RETENTION_DAYS: ${TRASH_RETENTION_DAYS:-30}
+      # Primeiro admin (SPEC-001 §3.2): só é usado se ainda não existir nenhum
+      # admin. Depois do 1º login, APAGUE SEED_ADMIN_PASSWORD do .env.
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Administrador}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+    # Imagem slim não tem curl/wget: healthcheck via node. start_period cobre
+    # as migrations do entrypoint no primeiro boot.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+      - diagram_net
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik}"
+      - "traefik.http.routers.diagram-api.rule=Host(`${DIAGRAM_DOMAIN:-diagram.paglamp.com.br}`) && (PathPrefix(`/api`) || PathPrefix(`/collab`))"
+      - "traefik.http.routers.diagram-api.entrypoints=websecure"
+      - "traefik.http.routers.diagram-api.tls=true"
+      - "traefik.http.routers.diagram-api.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-leresolver}"
+      - "traefik.http.routers.diagram-api.priority=100"
+      - "traefik.http.routers.diagram-api.service=diagram-api"
+      - "traefik.http.services.diagram-api.loadbalancer.server.port=3001"
+      - "autoheal=true"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: diagram_web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik}"
+      - "traefik.http.routers.diagram-web.rule=Host(`${DIAGRAM_DOMAIN:-diagram.paglamp.com.br}`)"
+      - "traefik.http.routers.diagram-web.entrypoints=websecure"
+      - "traefik.http.routers.diagram-web.tls=true"
+      - "traefik.http.routers.diagram-web.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-leresolver}"
+      - "traefik.http.routers.diagram-web.priority=10"
+      - "traefik.http.routers.diagram-web.service=diagram-web"
+      - "traefik.http.services.diagram-web.loadbalancer.server.port=8080"
+      - "autoheal=true"
+
+volumes:
+  diagram_pgdata:
+
+networks:
+  diagram_net:
+    driver: bridge
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}

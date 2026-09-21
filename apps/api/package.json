@@ -1,0 +1,47 @@
+{
+  "name": "@diagram/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/server.ts",
+    "build": "tsup",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:generate": "prisma generate",
+    "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
+    "db:studio": "dotenv -e ../../.env -- prisma studio",
+    "db:local": "tsx scripts/pglite-server.ts",
+    "db:new-migration": "tsx scripts/new-migration.ts"
+  },
+  "dependencies": {
+    "@diagram/shared": "workspace:^",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/helmet": "^13.1.1",
+    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/websocket": "^11.3.1",
+    "@hocuspocus/extension-database": "^4",
+    "@hocuspocus/server": "^4",
+    "@node-rs/argon2": "^2.2.1",
+    "@prisma/client": "^6",
+    "fastify": "^5.12.5",
+    "fastify-plugin": "^6.0.0",
+    "prisma": "^6",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.32",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
+    "@hocuspocus/provider": "^4",
+    "@types/node": "^26.6.2",
+    "@types/ws": "^8.18.1",
+    "dotenv-cli": "^11.0.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.1",
+    "ws": "^8.21.3"
+  }
+}

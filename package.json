@@ -1,0 +1,37 @@
+{
+  "name": "paglamp-diagram",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @diagram/api --filter @diagram/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @diagram/api db:generate",
+    "db:local": "pnpm --filter @diagram/api db:local",
+    "db:deploy": "pnpm --filter @diagram/api db:deploy",
+    "test:e2e": "playwright test",
+    "db:new-migration": "pnpm --filter @diagram/api db:new-migration"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "typescript-eslint": "^8.70.1",
+    "vitest": "^5.0.1"
+  },
+  "type": "module",
+  "pnpm": {
+    "overrides": {
+      "deepmerge-ts": "^8.0.2"
+    }
+  }
+}
