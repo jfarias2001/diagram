@@ -5,7 +5,7 @@
 | Status | **Aprovado** (2026-09-22) |
 | Autor | Claude (a partir do pedido do usuário) |
 | Data | 2026-09-22 |
-| SPEC | (quando existir) |
+| SPEC | [SPEC-005](../spec/SPEC-005-historico-versoes.md) |
 
 ## 1. Problema
 Como tudo salva sozinho e várias pessoas editam juntas, um erro (apagar um ramo grande sem querer, um colega que reorganiza tudo) fica gravado na hora. O desfazer só volta as **minhas** alterações e some ao fechar a aba. Não há como voltar o documento para como estava ontem.

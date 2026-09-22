@@ -5,7 +5,7 @@
 | Status | **Aprovado** (2026-09-22) |
 | Autor | Claude (a partir do pedido do usuário) |
 | Data | 2026-09-22 |
-| SPEC | (quando existir) |
+| SPEC | [SPEC-004](../spec/SPEC-004-pastas.md) |
 
 ## 1. Problema
 Com o tempo cada colaborador acumula dezenas de mapas e fluxogramas, próprios e compartilhados, todos numa lista só. Fica difícil achar o que importa sem lembrar o nome exato.

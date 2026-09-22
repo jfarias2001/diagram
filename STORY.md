@@ -25,10 +25,50 @@
 
 ## Estado atual (atualize a cada entrada)
 
-- **Fase:** MVP (SPEC-001), mapa com o mouse (SPEC-002) e **fluxogramas (SPEC-003)** implementados e testados; ainda não publicados na VPS. PRDs 004 e 005 aprovados, sem SPEC. PRD-006 em rascunho.
+- **Fase:** MVP (SPEC-001), mapa com o mouse (SPEC-002) e **fluxogramas (SPEC-003)** implementados e testados; ainda não publicados na VPS. PRDs 004, 005 e 006 aprovados; **SPEC-004, SPEC-005 e SPEC-006 escritas, aguardando aprovação**.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** aprovação do PRD-006 (arrastar livre, formatos de bloco, tema claro/escuro); em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+- **Próximo passo:** aprovação das SPECs 004–006 e escolha da ordem de implementação; em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+
+---
+
+## 2026-09-22 — SPECs 004 (pastas), 005 (versões) e 006 (mapa livre) escritas
+**Tipo:** docs
+**Refs:** PRD-004, PRD-005, PRD-006, SPEC-004, SPEC-005, SPEC-006
+
+**O que mudou**
+- **PRD-006 aprovado**, com as três perguntas em aberto respondidas pelo usuário: "ícones de formas" = **formato do bloco**; arrasto passa a só posicionar (ordem vai para o teclado e a barra) = **ok**; tema claro/escuro vale **só para o quadro**, não para a interface inteira. Junto veio um pedido novo, já no PRD: **cor de preenchimento do bloco**, com o texto escolhendo sozinho entre claro e escuro para manter contraste.
+- **SPEC-004 (pastas)** em rascunho:
+  - `Folder` (pessoal/compartilhada, 3 níveis, com `rootId` para achar a pasta principal num salto) e `FolderMember`;
+  - dois vínculos diferentes: `DocumentPlacement` (pasta pessoal, por usuário) e `Document.sharedFolderId` (pasta compartilhada, global);
+  - **papel efetivo = maior entre o papel direto e o herdado da pasta**, calculado num lugar só (`assertDocumentAccess`); a herança nunca dá `OWNER`;
+  - tudo que tira acesso (remover membro, tirar da pasta, apagar pasta) derruba as conexões Yjs na hora;
+  - painel com lateral de pastas, caminho, arrastar o cartão para a pasta e "Mover para…".
+- **SPEC-005 (histórico de versões)** em rascunho:
+  - tabela `Snapshot` com o estado binário do Y.Doc, tipos `AUTO`/`NAMED`/`CHECKPOINT`;
+  - versões automáticas criadas **pelo servidor** (a cada 10 min de edição e quando o último sai), não pelo navegador;
+  - restaurar reconcilia o Y.Doc **vivo** com o da versão, então quem está com o documento aberto vê a mudança na hora; o estado atual vira um checkpoint e nada é apagado;
+  - retenção (30 dias completos, depois uma por dia até 1 ano) no mesmo job horário da lixeira, com teto por documento;
+  - painel de histórico no editor e modo "vendo a versão de…" somente leitura.
+- **SPEC-006 (mapa livre, formatos, cores e tema do quadro)** em rascunho:
+  - posição manual como **deslocamento relativo ao pai** (`dx`/`dy`): mover um bloco leva o ramo junto com **uma escrita só**, e um filho novo continua nascendo na posição automática;
+  - "Organizar" = apagar os deslocamentos numa transação (um Ctrl+Z desfaz);
+  - `shape` (6 formatos) e `fill` (hex) no nó, com `readableInk` para o contraste do texto;
+  - tema do quadro por escopo de tokens (`data-board`) no elemento do quadro, guardado no `localStorage` — o resto da interface continua seguindo o sistema;
+  - sem migration e sem rota nova.
+
+**Revisão de segurança**
+- Só documentação; nenhuma linha de código alterada. O que as SPECs já deixam amarrado:
+  - **SPEC-004 §6:** ponto único de autorização com papel efetivo; pasta alheia sempre 404 (IDOR); `PUT /shared-folder` exige ser dono do documento **e** ter poder na pasta (ninguém publica documento alheio para a equipe); derrubada de conexões em toda perda de acesso; rate limit no convite; tetos de profundidade, quantidade e membros; ADMIN sem exceção.
+  - **SPEC-005 §6:** `versionId` sempre filtrado pelo `documentId` da URL; restaurar exige `EDITOR`; conteúdo servido como `attachment` com `nosniff`; estado restaurado passa pelos leitores defensivos e pelo reparo (link `javascript:` e cor inválida não voltam); tetos de tamanho e retenção contra crescimento sem controle; lista mostra nome, nunca e-mail.
+  - **SPEC-006 §6:** `shape`, `fill`, `dx` e `dy` validados **na leitura** do Yjs (cliente adulterado não injeta CSS nem valor absurdo); cores só em `style`, nunca em HTML; leitor continua sem conseguir mover, formatar ou pintar, com teste de update forjado.
+- `pnpm audit --prod`: sem dependência nova nesta etapa; resultado registrado na entrada anterior (sem vulnerabilidades).
+
+**Pendências / próximos passos**
+- [ ] Aprovação das SPECs 004, 005 e 006 (e da ordem de implementação).
+- [ ] SPEC-004 §10: sem transferência de posse — se o dono de uma pasta compartilhada for desativado, só um ADMIN reativando devolve a gestão da pasta.
+- [ ] SPEC-005 §10: o histórico aumenta o banco; considerar no PRD de backup.
+- [ ] SPEC-006 §10: arrastar um ramo para o outro lado da raiz não troca o lado lógico do ramo.
 
 ---
 
