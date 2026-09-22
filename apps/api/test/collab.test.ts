@@ -154,6 +154,36 @@ describe('WebSocket /collab', () => {
     expect(stored.root?.text).toBe('Mapa');
   });
 
+  it('nota do editor entra na busca do painel (SPEC-002 §7)', async () => {
+    const { id, owner, editor } = await setup();
+    const e = connect(editor.cookie, id);
+    await waitFor(() => e.state.synced);
+    const a = connect(owner.cookie, id);
+    await waitFor(() => a.state.synced);
+    updateNode(e.doc, 'root', { note: 'Detalhe com a palavra xilofonenota' });
+    await waitFor(() => readNodes(a.doc).root?.note !== undefined);
+
+    const stored = await storedNodes(id);
+    expect(stored.root?.note).toContain('xilofonenota');
+    const res = await call(app, owner.cookie, 'GET', '/documents?scope=mine&q=xilofonenota');
+    expect(res.json().items.map((d: { id: string }) => d.id)).toContain(id);
+  });
+
+  it('leitor não consegue gravar nota nem link forjando o WebSocket', async () => {
+    const { id, owner, viewer } = await setup();
+    const a = connect(owner.cookie, id);
+    const v = connect(viewer.cookie, id);
+    await waitFor(() => a.state.synced && v.state.synced);
+
+    updateNode(v.doc, 'root', { note: 'nota invasora', link: 'https://evil.com' });
+    await new Promise((r) => setTimeout(r, 800));
+
+    expect(readNodes(a.doc).root?.note).toBeUndefined();
+    const stored = await storedNodes(id);
+    expect(stored.root?.note).toBeUndefined();
+    expect(stored.root?.link).toBeUndefined();
+  });
+
   it('remover o membro derruba a conexão e ele não volta', async () => {
     const { id, owner, editor } = await setup();
     const e = connect(editor.cookie, id);

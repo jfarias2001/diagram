@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Rascunho |
+| Status | **Implementado** (2026-09-22) |
 | PRD | [PRD-002](../prd/PRD-002-mapa-com-mouse-notas-links.md) |
 | Data | 2026-09-22 |
 
@@ -74,7 +74,7 @@ Arquivos em `apps/web/src/features/editor/`.
 | **B** (Ctrl+B) | alterna negrito | canEdit |
 | Nota | abre o `NotePanel` | sempre (leitor: só se houver nota) |
 | Link | popover `LinkEditor` | canEdit, ou leitor quando há link (abre o link) |
-| Recolher / Expandir (Espaço) | alterna `collapsed` | o nó tem filhos |
+| Recolher / Expandir (Espaço) | alterna `collapsed` | canEdit e o nó tem filhos (`collapsed` é compartilhado, então é edição) |
 | Apagar (Delete) | `deleteBranch` + a mesma regra de nova seleção do teclado | canEdit e não é raiz |
 
 - O `StylePanel` fixo no canto superior esquerdo **sai**; as cores passam para o popover da barra.
@@ -169,15 +169,15 @@ Sem mudança. A lista de atalhos (`ShortcutHint`) ganha a linha "Duplo clique �
 
 ## 8. Tarefas (em ordem)
 
-1. [ ] `shared`: `NODE_NOTE_MAX`, `NODE_LINK_MAX`, `normalizeLink`, `note`/`link` em schema, `readNode`, `writeNode`, `updateNode`, `extractSearchText` + testes de unidade.
-2. [ ] Web: extrair as ações do `onKeyDown` para funções reutilizáveis do canvas, sem mudar o comportamento (os testes e o E2E atuais continuam verdes).
-3. [ ] Web: `MindNodeData` com callbacks estáveis (`actionsRef`), o "+" no hover e os ícones de nota e link; `estimateSize` considerando os ícones.
-4. [ ] Web: `NodeActionBar` (com o popover de cores e o `LinkEditor`); remover o `StylePanel`.
-5. [ ] Web: `NotePanel`.
-6. [ ] Web: `CanvasControls` substituindo o `<Controls>`.
-7. [ ] Integração: busca pela nota e leitor tentando gravar a nota.
-8. [ ] E2E do fluxo "só mouse" + leitor; o teste de 1.000 nós continua passando.
-9. [ ] Revisão de segurança (CLAUDE.md §9) + `pnpm audit --prod` + STORY.md + PRD/SPEC `Implementado` + commit/push.
+1. [x] `shared`: `NODE_NOTE_MAX`, `NODE_LINK_MAX`, `normalizeLink`, `note`/`link` em schema, `readNode`, `writeNode`, `updateNode`, `extractSearchText` + testes de unidade.
+2. [x] Web: extrair as ações do `onKeyDown` para funções reutilizáveis do canvas, sem mudar o comportamento (os testes e o E2E atuais continuam verdes).
+3. [x] Web: `MindNodeData` com callbacks estáveis (`actionsRef`), o "+" no hover e os ícones de nota e link; `estimateSize` considerando os ícones.
+4. [x] Web: `NodeActionBar` (com o popover de cores e o `LinkEditor`); remover o `StylePanel`.
+5. [x] Web: `NotePanel`.
+6. [x] Web: `CanvasControls` substituindo o `<Controls>`.
+7. [x] Integração: busca pela nota e leitor tentando gravar a nota.
+8. [x] E2E do fluxo "só mouse" + leitor; o teste de 1.000 nós continua passando.
+9. [x] Revisão de segurança (CLAUDE.md §9) + `pnpm audit --prod` + STORY.md + PRD/SPEC `Implementado` + commit/push.
 
 ## 9. Variáveis de ambiente novas
 Nenhuma.
@@ -185,3 +185,14 @@ Nenhuma.
 ## 10. Riscos e decisões pendentes
 - **Nota com a última gravação vencendo:** se duas pessoas editarem a **mesma** nota ao mesmo tempo, vale o texto de quem gravou por último, e o do outro se perde. Usar `Y.Text` resolveria, mas exige ligar o `textarea` ao CRDT (diferença a cada tecla). A situação é rara, então fica como melhoria futura, se incomodar.
 - **Exportar PNG:** o export (SPEC-001) captura `.react-flow__viewport`. A `NodeToolbar` é renderizada fora dele, então não sai na imagem. Já o "+", que fica dentro do nó e aparece no nó selecionado, ganha a classe `export-hidden`, e o `toPng` passa a usar `filter` para ignorar esses elementos. Os ícones de nota e link **saem** no PNG, de propósito.
+
+## 11. Notas de implementação (desvios e decisões tomadas durante a implementação)
+
+- **Nós escondidos a cada mudança (defeito que já vinha do MVP):** o canvas entrega objetos de nó novos ao React Flow a cada mudança e, sem o campo `measured`, o React Flow trata cada nó como "não medido". Ele esconde o nó (`visibility: hidden`) e mede de novo **todos** os nós. Um clique que caísse nesse intervalo atravessava o nó e ia para o fundo. Agora o canvas guarda os tamanhos que chegam pelos eventos `dimensions` do `onNodesChange` e os devolve em cada nó. Isso também tira a re-medição dos 1.000 nós a cada tecla (§5.4).
+- **Duplo clique (§5.8):** o duplo clique num nó **não selecionado** não funcionava. O primeiro clique troca a seleção, e o `dblclick` do navegador ia para o fundo, que dava zoom. Agora:
+  - o canvas detecta dois cliques no mesmo nó em até 450 ms;
+  - o zoom por duplo clique está desligado (`zoomOnDoubleClick={false}`); o zoom continua na roda do mouse e nos botões da §5.7.
+- **Um passo de desfazer por ação:** o `Y.UndoManager` junta alterações feitas com menos de 400 ms de intervalo, então dois cliques rápidos na barra viravam um passo só. Cada ação discreta (criar, apagar, recolher, negrito, cor, link, mover) chama `stopCapturing()` antes. O texto digitado num nó recém-criado continua no mesmo passo da criação, como no MVP.
+- **Recolher/expandir** aparece na barra só para quem edita, porque `collapsed` é compartilhado no Y.Doc (§5.1 corrigida).
+- **Teclas dentro da barra, dos controles e dos popovers** não disparam atalhos do mapa: o `onKeyDown` do canvas ignora eventos vindos de `button`, `a`, `input`, `textarea` e `form`.
+- **E2E:** o teste antigo (`mvp.spec.ts`) usava `getByRole('button', { name: 'Adicionar' })`, que agora também encontra "Adicionar filho" e outros botões. Passou a usar `exact: true`, sem mudança de comportamento.

@@ -1,6 +1,7 @@
 import { NODE_TEXT_MAX } from '@diagram/shared';
 import { Handle, type Node, type NodeProps, Position } from '@xyflow/react';
 import { memo, useEffect, useRef, useState } from 'react';
+import { IconLink, IconNote, IconPlus } from './icons';
 import type { Side } from './layout';
 
 export type MindNodeData = {
@@ -14,9 +15,16 @@ export type MindNodeData = {
   draft: string | null;
   /** Colegas com este nó selecionado. */
   peers: Array<{ name: string; color: string }>;
+  canEdit: boolean;
+  hasNote: boolean;
+  /** Já validado por readNode (só http/https/mailto). */
+  link: string | null;
   onCommit: (id: string, text: string | null) => void;
   /** Teclas digitadas antes de o campo conseguir foco (ver NodeEditor). */
   takePending: () => string;
+  /** Callbacks estáveis (SPEC-002 §5.4). */
+  onAddChild: (id: string) => void;
+  onOpenNote: (id: string) => void;
 };
 
 /** Marca um Enter apertado antes de o campo de texto ganhar foco. */
@@ -26,14 +34,49 @@ export type MindFlowNode = Node<MindNodeData, 'mind'>;
 
 const hiddenHandle = '!h-1 !w-1 !min-h-0 !min-w-0 !border-0 !bg-transparent';
 
+/**
+ * "+" na borda de fora do nó (SPEC-002 §5.2). Aparece no hover só com CSS
+ * (sem estado React) e fica visível no nó selecionado, para funcionar no toque.
+ * O atraso ao esconder deixa o mouse atravessar a folga até o botão.
+ */
+function AddChildButton({ id, side, color, selected, onAdd }: {
+  id: string;
+  side: 'left' | 'right';
+  color: string;
+  selected: boolean;
+  onAdd: (id: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label="Adicionar tópico filho"
+      title="Adicionar tópico filho (Tab)"
+      onClick={(e) => {
+        e.stopPropagation();
+        onAdd(id);
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+      className={[
+        'nodrag nopan export-hidden absolute top-1/2 z-10 flex h-[22px] w-[22px] -translate-y-1/2 items-center justify-center rounded-full border-2 bg-surface text-ink shadow-sm',
+        'transition-[opacity,visibility,transform] delay-150 hover:scale-110 group-hover:visible group-hover:opacity-100 group-hover:delay-0',
+        selected ? 'visible opacity-100' : 'invisible opacity-0',
+      ].join(' ')}
+      style={{ borderColor: color, [side]: -26 }}
+    >
+      <IconPlus size={12} strokeWidth={3} />
+    </button>
+  );
+}
+
 function MindNodeComponent({ id, data, selected }: NodeProps<MindFlowNode>) {
   const isRoot = data.side === 'root';
   const peer = data.peers[0];
+  const canAdd = data.canEdit && !data.editing;
 
   return (
     <div
       className={[
-        'relative rounded-xl border-2 bg-surface text-ink',
+        'group relative rounded-xl border-2 bg-surface text-ink',
         isRoot ? 'px-6 py-3 font-display text-lg font-semibold' : 'px-3.5 py-1.5 text-sm',
         data.bold ? 'font-bold' : '',
         selected ? 'node-lit' : '',
@@ -45,16 +88,51 @@ function MindNodeComponent({ id, data, selected }: NodeProps<MindFlowNode>) {
         ...(peer && !selected ? { outline: `2px dashed ${peer.color}`, outlineOffset: 3 } : {}),
       }}
     >
-      {/* Texto sempre renderizado como texto — nunca HTML (CLAUDE.md §9). */}
-      {data.editing ? (
-        <NodeEditor
-          initial={data.draft ?? data.text}
-          takePending={data.takePending}
-          onDone={(text) => data.onCommit(id, text)}
-        />
-      ) : (
-        <span className="block whitespace-pre-wrap break-words">{data.text || ' '}</span>
-      )}
+      <div className="flex items-start gap-1.5">
+        {/* Texto sempre renderizado como texto — nunca HTML (CLAUDE.md §9). */}
+        {data.editing ? (
+          <NodeEditor
+            initial={data.draft ?? data.text}
+            takePending={data.takePending}
+            onDone={(text) => data.onCommit(id, text)}
+          />
+        ) : (
+          <span className="block min-w-0 flex-1 whitespace-pre-wrap break-words">{data.text || ' '}</span>
+        )}
+        {(data.hasNote || data.link) && (
+          <span className="flex shrink-0 items-center gap-0.5 self-center text-muted">
+            {data.hasNote && (
+              <button
+                type="button"
+                aria-label="Ver nota"
+                title="Ver nota"
+                className="nodrag nopan rounded p-0.5 hover:bg-surface-2 hover:text-ink"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  data.onOpenNote(id);
+                }}
+                onDoubleClick={(e) => e.stopPropagation()}
+              >
+                <IconNote size={14} />
+              </button>
+            )}
+            {data.link && (
+              <a
+                href={data.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Abrir link: ${data.link}`}
+                title={data.link}
+                className="nodrag nopan rounded p-0.5 hover:bg-surface-2 hover:text-ink"
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+              >
+                <IconLink size={14} />
+              </a>
+            )}
+          </span>
+        )}
+      </div>
 
       {peer && (
         <span
@@ -67,13 +145,17 @@ function MindNodeComponent({ id, data, selected }: NodeProps<MindFlowNode>) {
 
       {data.hasHiddenChildren && (
         <span
-          className="absolute top-1/2 flex h-4 min-w-4 -translate-y-1/2 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+          className={`absolute top-1/2 flex h-4 min-w-4 -translate-y-1/2 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${canAdd ? 'group-hover:invisible' : ''} ${canAdd && selected ? 'invisible' : ''}`}
           style={{ background: data.color, [data.side === 'left' ? 'left' : 'right']: -20 }}
           title="Ramo recolhido (Espaço para abrir)"
         >
           +
         </span>
       )}
+
+      {canAdd && (isRoot ? (['left', 'right'] as const) : [data.side as 'left' | 'right']).map((side) => (
+        <AddChildButton key={side} id={id} side={side} color={data.color} selected={!!selected} onAdd={data.onAddChild} />
+      ))}
 
       <Handle type="target" position={Position.Left} id="t-l" isConnectable={false} className={hiddenHandle} />
       <Handle type="target" position={Position.Right} id="t-r" isConnectable={false} className={hiddenHandle} />
@@ -137,7 +219,7 @@ function NodeEditor({
       rows={Math.max(1, value.split('\n').length)}
       maxLength={NODE_TEXT_MAX}
       aria-label="Texto do nó"
-      className="nodrag nopan block w-full min-w-[120px] resize-none bg-transparent outline-none"
+      className="nodrag nopan block w-full min-w-[120px] flex-1 resize-none bg-transparent outline-none"
       onChange={(e) => setValue(e.target.value)}
       onBlur={() => finish(value)}
       onKeyDown={(e) => {

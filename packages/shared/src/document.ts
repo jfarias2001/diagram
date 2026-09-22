@@ -21,6 +21,9 @@ export function hasRole(actual: Role, required: Role): boolean {
 }
 
 export const NODE_TEXT_MAX = 2_000;
+/** Nota do nó: texto simples (SPEC-002 §2.2). */
+export const NODE_NOTE_MAX = 5_000;
+export const NODE_LINK_MAX = 2_048;
 
 /**
  * Nó de mapa mental como fica no Y.Map `nodes` (ADR-002): lista plana,
@@ -37,6 +40,8 @@ export const mindMapNodeSchema = z.object({
     .optional(),
   bold: z.boolean().optional(),
   collapsed: z.boolean().optional(),
+  note: z.string().max(NODE_NOTE_MAX).optional(),
+  link: z.string().max(NODE_LINK_MAX).refine(isSafeLink).optional(),
 });
 
 export type MindMapNode = z.infer<typeof mindMapNodeSchema>;
@@ -49,4 +54,16 @@ export function isSafeLink(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Normaliza o link digitado pelo usuário (SPEC-002 §2.3). Sem protocolo vira
+ * https://; qualquer coisa fora de http/https/mailto volta null.
+ */
+export function normalizeLink(input: string): string | null {
+  const value = input.trim();
+  if (!value || /\s/.test(value)) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`;
+  if (withScheme.length > NODE_LINK_MAX || !isSafeLink(withScheme)) return null;
+  return withScheme;
 }

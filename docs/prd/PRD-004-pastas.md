@@ -100,7 +100,7 @@ Pôr um documento numa pasta pessoal **não** muda o papel de ninguém no docume
 
 ## 9. Perguntas em aberto
 Respondidas pelo usuário em 2026-09-22:
-- [x] Pessoais ou compartilhadas → **as duas**. As regras das pastas compartilhadas (§5.C) foram detalhadas depois dessa resposta e **precisam de confirmação antes da SPEC-004**, principalmente:
-  - [ ] Entrar na pasta dá acesso a todos os documentos dela (§5.14)?
-  - [ ] Só o dono do documento pode colocá-lo numa pasta compartilhada (§5.16)?
+- [x] Pessoais ou compartilhadas → **as duas**. As regras das pastas compartilhadas (§5.C) foram detalhadas depois dessa resposta e **confirmadas pelo usuário em 2026-09-22**:
+  - [x] Entrar na pasta dá acesso a todos os documentos dela (§5.14).
+  - [x] Só o dono do documento pode colocá-lo numa pasta compartilhada (§5.16).
 - [x] 3 níveis de subpasta → aprovado junto com o PRD.

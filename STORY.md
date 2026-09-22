@@ -25,10 +25,61 @@
 
 ## Estado atual (atualize a cada entrada)
 
-- **Fase:** MVP (PRD-001/SPEC-001) **implementado e testado**; ainda não publicado na VPS.
+- **Fase:** MVP (PRD-001/SPEC-001) e PRD-002/SPEC-002 (mapa com o mouse, notas e links) **implementados e testados**; ainda não publicados na VPS. PRDs 003–005 aprovados, sem SPEC.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** aprovação da SPEC-002 (rascunho) e confirmação das regras de pastas compartilhadas (PRD-004 §9); em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+- **Próximo passo:** SPEC-003 (fluxogramas) para aprovação; em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+
+---
+
+## 2026-09-22 — Mapa mental com o mouse, notas e links (SPEC-002)
+**Tipo:** feature, fix
+**Refs:** PRD-002, SPEC-002
+
+**O que mudou**
+- **Barra flutuante** sobre o tópico selecionado:
+  - + Filho, + Irmão, cor, negrito, nota, link, recolher/expandir e apagar;
+  - cada botão mostra o atalho de teclado equivalente;
+  - substitui a paleta fixa do canto superior;
+  - para leitores, mostra só "ver nota" e "abrir link".
+- **"+" ao passar o mouse** na borda de fora do tópico (dois na raiz). Também fica visível no tópico selecionado, para funcionar no toque.
+- **Duplo clique** edita o texto, inclusive num tópico que não estava selecionado. O duplo clique não dá mais zoom.
+- **Controles no canto inferior:**
+  - desfazer e refazer, desabilitados quando não há o que fazer;
+  - afastar, aproximar e ajustar à tela.
+- **Nota** (texto simples, até 5.000 caracteres):
+  - painel lateral com contador, que salva sozinho;
+  - ícone no tópico que tem nota;
+  - leitores leem a nota sem editar;
+  - a busca do painel encontra palavras das notas.
+- **Link** por tópico:
+  - só http/https/mailto; endereço sem protocolo vira `https://`;
+  - ícone no tópico, que abre em nova aba com `noopener noreferrer`.
+- **Modelo:** campos opcionais `note` e `link` no nó do Y.Doc, sem migration.
+- **Correções encontradas no caminho:**
+  - **Nós escondidos a cada mudança** (vinha do MVP): o React Flow recebia os nós sem o tamanho medido, escondia todos e media de novo. Um clique nesse intervalo "atravessava" o tópico, e os 1.000 nós eram re-medidos a cada tecla. Agora o tamanho medido é guardado e devolvido.
+  - **Desfazer juntava cliques rápidos** num passo só: cada ação discreta agora é um passo próprio.
+- **Testes:** 145 de unidade e integração (13 novos) e 4 E2E, entre eles o fluxo "só com o mouse", com a leitora. Os novos cobrem:
+  - `normalizeLink` e a leitura defensiva do link;
+  - nota na busca;
+  - leitor forjando nota e link pelo WebSocket;
+  - `data` estável dos nós.
+
+**Revisão de segurança**
+- Checklist CLAUDE.md §9 revisada no que mudou:
+  - **Autorização:** nenhuma rota nova. O `/collab` continua passando por `assertDocumentAccess`. O teste novo confirma que nota e link enviados por um leitor são descartados no servidor.
+  - **XSS por link:** bloqueado em duas camadas:
+    - `normalizeLink` na interface;
+    - `isSafeLink` em `readNode`, de modo que um `javascript:` ou `data:` gravado direto no Y.Doc nunca vira `href`.
+  - Os três `target="_blank"` têm `rel="noopener noreferrer"`.
+  - **XSS pela nota:** a nota é renderizada como texto; `dangerouslySetInnerHTML` continua bloqueado pelo ESLint.
+  - **Tamanho:** a nota é cortada em 5.000 caracteres na leitura, e os limites de 5 MB por documento e 2 MB por mensagem continuam valendo.
+- `pnpm audit --prod`: **sem vulnerabilidades**.
+
+**Pendências / próximos passos**
+- [ ] Nota editada por duas pessoas ao mesmo tempo: vale a última gravação (risco aceito na SPEC-002 §10).
+- [ ] A barra flutuante pode cobrir parte do tópico logo acima do selecionado. Aceitável por ora; reavaliar com uso real.
+- [ ] SPEC-003 (fluxogramas).
 
 ---
 

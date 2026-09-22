@@ -120,12 +120,16 @@ export function computeTreeRepairs(nodes: NodeRecord): TreeRepair[] {
 export function extractSearchText(nodes: NodeRecord, max = 10_000): string {
   const parts: string[] = [];
   let size = 0;
-  for (const node of Object.values(nodes)) {
-    const text = node.text.trim();
-    if (!text) continue;
-    parts.push(text);
-    size += text.length + 1;
-    if (size >= max) break;
+  // Textos dos nós primeiro; notas depois, para os títulos terem prioridade no limite (SPEC-002 §2.3).
+  const sources = [Object.values(nodes).map((n) => n.text), Object.values(nodes).map((n) => n.note ?? '')];
+  for (const list of sources) {
+    for (const raw of list) {
+      const text = raw.trim();
+      if (!text) continue;
+      parts.push(text);
+      size += text.length + 1;
+      if (size >= max) return parts.join(' ').slice(0, max);
+    }
   }
   return parts.join(' ').slice(0, max);
 }

@@ -32,6 +32,8 @@ export async function exportMindMapPng(nodes: Node[], title: string): Promise<vo
     width,
     height,
     pixelRatio: 1,
+    // Botões do editor (o "+" do nó) não saem na imagem (SPEC-002 §10).
+    filter: (el) => !(el instanceof HTMLElement && el.classList.contains('export-hidden')),
     style: {
       width: `${width}px`,
       height: `${height}px`,

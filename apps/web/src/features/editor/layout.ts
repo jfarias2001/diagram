@@ -25,7 +25,10 @@ const H_GAP = 56;
 const SIBLING_GAP = 12;
 const COUSIN_GAP = 26;
 
-export function estimateSize(text: string, isRoot = false): { width: number; height: number } {
+/** Largura de cada ícone de nota/link ao lado do texto (MindNode). */
+export const NODE_ICON_W = 20;
+
+export function estimateSize(text: string, isRoot = false, icons = 0): { width: number; height: number } {
   const charW = isRoot ? ROOT_CHAR_W : CHAR_W;
   const padX = isRoot ? 52 : 32;
   const maxW = isRoot ? ROOT_MAX_W : MAX_W;
@@ -38,7 +41,7 @@ export function estimateSize(text: string, isRoot = false): { width: number; hei
     lines += Math.max(1, Math.ceil(w / inner));
   }
   return {
-    width: Math.max(48, Math.ceil(widest + padX)),
+    width: Math.max(48, Math.ceil(widest + padX + icons * NODE_ICON_W)),
     height: lines * (isRoot ? 26 : LINE_H) + (isRoot ? 28 : 16),
   };
 }
@@ -57,7 +60,8 @@ export function layoutMindMap(nodes: Record<string, MindMapNode>): PositionedNod
   const sizeOf = (id: string) => {
     let s = size.get(id);
     if (!s) {
-      s = estimateSize(nodes[id]?.text ?? '', id === root.id);
+      const node = nodes[id];
+      s = estimateSize(node?.text ?? '', id === root.id, (node?.note ? 1 : 0) + (node?.link ? 1 : 0));
       size.set(id, s);
     }
     return s;

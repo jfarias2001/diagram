@@ -1,18 +1,19 @@
-import { type DocumentSummary, findRoot, type NodeRecord, updateNode } from '@diagram/shared';
+import { type DocumentSummary, findRoot } from '@diagram/shared';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import type * as Y from 'yjs';
 import { Avatar, Button, colorFor, Spinner } from '../../components/ui';
 import { api, ApiError } from '../../lib/api';
 import { useMe } from '../auth/session';
 import { exportMindMapPng } from './exportPng';
-import { BRANCH_COLORS, MindMapCanvas } from './MindMapCanvas';
+import { MindMapCanvas } from './MindMapCanvas';
+import { NotePanel } from './NotePanel';
 import { ShareDialog } from './ShareDialog';
 import { type CollabState, type SaveStatus, useCollab } from './useCollab';
-import { LOCAL_ORIGIN, useMindMapNodes, useUndoManager } from './useMindMap';
+import { useMindMapNodes, useUndoManager } from './useMindMap';
 
 export default function EditorPage() {
   const { id = '' } = useParams();
@@ -75,12 +76,21 @@ function Editor({
   const undo = useUndoManager(doc);
   const [selectedId, setSelectedId] = useState<string | null>(() => findRoot(nodes)?.id ?? null);
   const [sharing, setSharing] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const openNote = useCallback(() => setNoteOpen(true), []);
+  const noteNodeId = useRef<string | null>(null);
 
   useEffect(() => {
     if (me) provider.setAwarenessField('user', { id: me.id, name: me.name, color: colorFor(me.id) });
   }, [provider, me]);
 
   const selected = selectedId ? nodes[selectedId] : undefined;
+
+  // Tópico apagado (por alguém) com a nota aberta: fecha o painel (SPEC-002 §5.5).
+  useEffect(() => {
+    if (noteOpen && noteNodeId.current && !nodes[noteNodeId.current]) setNoteOpen(false);
+    noteNodeId.current = noteOpen ? (selectedId ?? noteNodeId.current) : null;
+  }, [nodes, noteOpen, selectedId]);
 
   return (
     <div className="flex h-full flex-col">
@@ -108,9 +118,10 @@ function Editor({
           undo={undo}
           selectedId={selectedId}
           onSelect={setSelectedId}
+          onOpenNote={openNote}
         />
-        {canEdit && selected && <StylePanel doc={doc} nodes={nodes} nodeId={selected.id} />}
         <ShortcutHint canEdit={canEdit} />
+        {noteOpen && <NotePanel doc={doc} node={selected} canEdit={canEdit} onClose={() => setNoteOpen(false)} />}
       </div>
 
       {me && (
@@ -226,51 +237,13 @@ function ExportButton({ title }: { title: string }) {
   );
 }
 
-function StylePanel({ doc, nodes, nodeId }: { doc: Y.Doc; nodes: NodeRecord; nodeId: string }) {
-  const node = nodes[nodeId];
-  if (!node) return null;
-  return (
-    <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-xl border border-line bg-surface p-1.5 shadow-sm">
-      {BRANCH_COLORS.map((color) => (
-        <button
-          key={color}
-          type="button"
-          aria-label={`Cor ${color}`}
-          aria-pressed={node.color === color}
-          onClick={() => updateNode(doc, nodeId, { color }, LOCAL_ORIGIN)}
-          className={`h-5 w-5 rounded-full transition ${node.color === color ? 'ring-2 ring-ink ring-offset-2 ring-offset-surface' : 'hover:scale-110'}`}
-          style={{ background: color }}
-        />
-      ))}
-      <button
-        type="button"
-        onClick={() => updateNode(doc, nodeId, { color: '' }, LOCAL_ORIGIN)}
-        className="rounded-md px-1.5 text-xs text-muted hover:bg-surface-2 hover:text-ink"
-        title="Voltar à cor do ramo"
-      >
-        Auto
-      </button>
-      <span className="mx-1 h-5 w-px bg-line" />
-      <button
-        type="button"
-        aria-pressed={!!node.bold}
-        onClick={() => updateNode(doc, nodeId, { bold: !node.bold }, LOCAL_ORIGIN)}
-        className={`h-7 w-7 rounded-md text-sm font-bold ${node.bold ? 'bg-surface-2 text-ink' : 'text-muted hover:bg-surface-2'}`}
-        title="Negrito (Ctrl+B)"
-      >
-        B
-      </button>
-    </div>
-  );
-}
-
 function ShortcutHint({ canEdit }: { canEdit: boolean }) {
   const [open, setOpen] = useState(false);
   const rows: Array<[string, string]> = canEdit
     ? [
         ['Tab', 'novo filho'],
         ['Enter', 'novo irmão'],
-        ['F2 ou digitar', 'editar texto'],
+        ['F2, digitar ou duplo clique', 'editar texto'],
         ['Delete', 'apagar ramo'],
         ['Espaço', 'recolher/abrir'],
         ['Setas', 'navegar'],

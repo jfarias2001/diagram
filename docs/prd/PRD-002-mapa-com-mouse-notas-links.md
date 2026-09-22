@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aprovado** (2026-09-22) |
+| Status | **Implementado** (2026-09-22) |
 | Autor | Claude (a partir do pedido do usuário) |
 | Data | 2026-09-22 |
 | SPEC | [SPEC-002](../spec/SPEC-002-mapa-com-mouse-notas-links.md) |
@@ -45,14 +45,14 @@ Todos os colaboradores que editam mapas mentais (Dono e Editor). Leitores e Come
 - Desktop primeiro; em tela de toque a barra flutuante deve funcionar com toque simples.
 
 ## 6. Critérios de aceite
-- [ ] Dado um mapa novo, quando o usuário usa só o mouse, então consegue criar filhos, irmãos, editar texto, mudar cor, recolher e apagar blocos.
-- [ ] Dado um bloco selecionado, quando clica em `+ Filho` ou no "+", então o filho aparece já em edição.
-- [ ] Dado um duplo clique num bloco, então o texto entra em edição com o cursor no fim.
-- [ ] Dado um link `javascript:...` ou `data:...`, quando o usuário tenta salvar, então o link é recusado com mensagem clara.
-- [ ] Dado um bloco com nota e link, quando um Leitor abre o mapa, então ele lê a nota e abre o link, mas não consegue editá-los (nem forjando mensagens).
-- [ ] Dado que dois editores estão no mapa, quando um adiciona uma nota, então o outro vê o ícone de nota em poucos segundos.
-- [ ] A busca do painel encontra um mapa por uma palavra que só existe numa nota.
-- [ ] Ctrl+Z desfaz uma ação feita pelo mouse.
+- [x] Dado um mapa novo, quando o usuário usa só o mouse, então consegue criar filhos, irmãos, editar texto, mudar cor, recolher e apagar blocos.
+- [x] Dado um bloco selecionado, quando clica em `+ Filho` ou no "+", então o filho aparece já em edição.
+- [x] Dado um duplo clique num bloco, então o texto entra em edição com o cursor no fim.
+- [x] Dado um link `javascript:...` ou `data:...`, quando o usuário tenta salvar, então o link é recusado com mensagem clara.
+- [x] Dado um bloco com nota e link, quando um Leitor abre o mapa, então ele lê a nota e abre o link, mas não consegue editá-los (nem forjando mensagens).
+- [x] Dado que dois editores estão no mapa, quando um adiciona uma nota, então o outro vê o ícone de nota em poucos segundos.
+- [x] A busca do painel encontra um mapa por uma palavra que só existe numa nota.
+- [x] Ctrl+Z desfaz uma ação feita pelo mouse.
 
 ## 7. Permissões
 | Ação | OWNER | EDITOR | COMMENTER | VIEWER |

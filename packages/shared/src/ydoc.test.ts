@@ -132,4 +132,58 @@ describe('extractSearchText', () => {
     expect(text).toContain('A1');
     expect(extractSearchText(readNodes(sampleDoc()), 3).length).toBeLessThanOrEqual(3);
   });
+
+  it('inclui as notas, depois dos textos dos nós', () => {
+    const doc = sampleDoc();
+    updateNode(doc, 'a', { note: 'palavraúnica da nota' });
+    const text = extractSearchText(readNodes(doc));
+    expect(text).toContain('palavraúnica');
+    expect(text.indexOf('palavraúnica')).toBeGreaterThan(text.indexOf('A1'));
+  });
+});
+
+describe('nota e link no nó (SPEC-002 §2.2)', () => {
+  it('grava e apaga nota e link', () => {
+    const doc = sampleDoc();
+    expect(updateNode(doc, 'a', { note: 'detalhes', link: 'https://paglamp.com.br' })).toBe(true);
+    expect(readNodes(doc).a).toMatchObject({ note: 'detalhes', link: 'https://paglamp.com.br' });
+    updateNode(doc, 'a', { note: '', link: '' });
+    expect(readNodes(doc).a?.note).toBeUndefined();
+    expect(readNodes(doc).a?.link).toBeUndefined();
+  });
+
+  it('link inválido não grava nada e retorna false', () => {
+    const doc = sampleDoc();
+    updateNode(doc, 'a', { link: 'https://ok.com' });
+    expect(updateNode(doc, 'a', { link: 'javascript:alert(1)', note: 'x' })).toBe(false);
+    expect(readNodes(doc).a).toMatchObject({ link: 'https://ok.com' });
+    expect(readNodes(doc).a?.note).toBeUndefined();
+  });
+
+  it('descarta na leitura link inseguro gravado direto no Y.Doc', () => {
+    const doc = sampleDoc();
+    doc.getMap<Y.Map<unknown>>('nodes').get('a')?.set('link', 'javascript:alert(1)');
+    doc.getMap<Y.Map<unknown>>('nodes').get('b')?.set('link', 'data:text/html,x');
+    expect(readNodes(doc).a?.link).toBeUndefined();
+    expect(readNodes(doc).b?.link).toBeUndefined();
+  });
+
+  it('corta nota grande e ignora nota que não é texto', () => {
+    const doc = sampleDoc();
+    const nodes = doc.getMap<Y.Map<unknown>>('nodes');
+    nodes.get('a')?.set('note', 'x'.repeat(6000));
+    nodes.get('b')?.set('note', { html: '<b>x</b>' });
+    expect(readNodes(doc).a?.note).toHaveLength(5000);
+    expect(readNodes(doc).b?.note).toBeUndefined();
+  });
+
+  it('desfazer volta a nota anterior', () => {
+    const doc = sampleDoc();
+    const undo = new Y.UndoManager(doc.getMap('nodes'), { trackedOrigins: new Set([LOCAL]) });
+    updateNode(doc, 'a', { note: 'primeira' }, LOCAL);
+    undo.stopCapturing();
+    updateNode(doc, 'a', { note: 'segunda' }, LOCAL);
+    undo.undo();
+    expect(readNodes(doc).a?.note).toBe('primeira');
+  });
 });

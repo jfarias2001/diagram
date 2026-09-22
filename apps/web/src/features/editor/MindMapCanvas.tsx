@@ -10,15 +10,26 @@ import {
   updateNode,
 } from '@diagram/shared';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
-import { Background, BackgroundVariant, Controls, type Edge, type Node, ReactFlow, useReactFlow } from '@xyflow/react';
+import {
+  Background,
+  BackgroundVariant,
+  type Edge,
+  type Node,
+  type NodeChange,
+  ReactFlow,
+  useReactFlow,
+} from '@xyflow/react';
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
+import { CanvasControls, FIT_VIEW_OPTIONS } from './CanvasControls';
 import { layoutMindMap, type PositionedNode } from './layout';
-import { type MindFlowNode, MindNode, PENDING_ENTER } from './MindNode';
+import { type MindFlowNode, MindNode, type MindNodeData, PENDING_ENTER } from './MindNode';
+import { BRANCH_COLORS, type NodeActions, NodeActionBar } from './NodeActionBar';
+import { stableData } from './stableData';
 import { LOCAL_ORIGIN } from './useMindMap';
 
-export const BRANCH_COLORS = ['#e8590c', '#1c7ed6', '#2f9e44', '#ae3ec9', '#f08c00', '#0c8599', '#d6336c', '#5c7cfa'];
 const ROOT_COLOR = '#667085';
+const DOUBLE_CLICK_MS = 450;
 const NO_PEERS: Array<{ name: string; color: string }> = [];
 const nodeTypes = { mind: MindNode };
 
@@ -30,6 +41,8 @@ interface Props {
   undo: Y.UndoManager | null;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /** Abre o painel de nota do tópico (SPEC-002 §5.5). */
+  onOpenNote: (id: string) => void;
 }
 
 type PeerSelection = Map<string, Array<{ name: string; color: string }>>;
@@ -60,11 +73,12 @@ function usePeerSelections(provider: HocuspocusProvider): PeerSelection {
   return peers;
 }
 
-export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId, onSelect }: Props) {
+export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId, onSelect, onOpenNote }: Props) {
   const [editing, setEditing] = useState<{ id: string; draft: string | null } | null>(null);
   const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef('');
+  const lastClick = useRef<{ id: string; at: number } | null>(null);
   const takePending = useCallback(() => {
     const text = pendingRef.current;
     pendingRef.current = '';
@@ -84,7 +98,7 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
     if (editing && !nodes[editing.id]) setEditing(null);
   }, [nodes, selectedId, editing, onSelect]);
 
-  const focusCanvas = () => wrapperRef.current?.focus({ preventScroll: true });
+  const focusCanvas = useCallback(() => wrapperRef.current?.focus({ preventScroll: true }), []);
 
   const commitText = useCallback(
     (id: string, text: string | null) => {
@@ -117,6 +131,21 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
     return colors;
   }, [nodes, index]);
 
+  // Callbacks estáveis para o data dos nós; leem as ações atuais pelo ref (SPEC-002 §5.4).
+  const actionsRef = useRef<NodeActions | null>(null);
+  const onAddChild = useCallback((id: string) => actionsRef.current?.createChild(id), []);
+  const onOpenNoteStable = useCallback((id: string) => actionsRef.current?.openNote(id), []);
+  const dataCache = useRef(new Map<string, MindNodeData>());
+  // Tamanho medido de cada nó. Sem ele, cada objeto de nó novo chega ao React Flow
+  // "não medido" e o nó fica escondido até ser medido de novo — um clique nesse
+  // intervalo atravessa o nó e todos os nós são re-medidos a cada mudança.
+  const measured = useRef(new Map<string, { width: number; height: number }>());
+  const onNodesChange = useCallback((changes: NodeChange<MindFlowNode>[]) => {
+    for (const change of changes) {
+      if (change.type === 'dimensions' && change.dimensions) measured.current.set(change.id, change.dimensions);
+    }
+  }, []);
+
   const flow = useMemo(() => {
     const flowNodes: MindFlowNode[] = [];
     const flowEdges: Edge[] = [];
@@ -133,7 +162,8 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
         selected: node.id === selectedId,
         draggable: canEdit && node.parentId !== null && editing?.id !== node.id,
         zIndex: isDragging ? 10 : 0,
-        data: {
+        measured: measured.current.get(node.id),
+        data: stableData(dataCache.current, node.id, {
           text: node.text,
           side: pos.side,
           color,
@@ -142,9 +172,14 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
           editing: editing?.id === node.id,
           draft: editing?.id === node.id ? editing.draft : null,
           peers: peers.get(node.id) ?? NO_PEERS,
+          canEdit,
+          hasNote: !!node.note,
+          link: node.link ?? null,
           onCommit: commitText,
           takePending,
-        },
+          onAddChild,
+          onOpenNote: onOpenNoteStable,
+        }),
       });
       if (node.parentId && !isDragging) {
         const left = pos.side === 'left';
@@ -159,8 +194,31 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
         });
       }
     }
+    // Nós que sumiram saem do cache.
+    if (dataCache.current.size > flowNodes.length) {
+      const alive = new Set(flowNodes.map((n) => n.id));
+      for (const id of dataCache.current.keys()) {
+        if (alive.has(id)) continue;
+        dataCache.current.delete(id);
+        measured.current.delete(id);
+      }
+    }
     return { flowNodes, flowEdges };
-  }, [positions, nodes, colorOf, drag, selectedId, canEdit, editing, index, peers, commitText, takePending]);
+  }, [
+    positions,
+    nodes,
+    colorOf,
+    drag,
+    selectedId,
+    canEdit,
+    editing,
+    index,
+    peers,
+    commitText,
+    takePending,
+    onAddChild,
+    onOpenNoteStable,
+  ]);
 
   // ---------- navegação por setas ----------
   const visibleChildren = (id: string) => (nodes[id]?.collapsed ? [] : (index.get(id) ?? []));
@@ -191,16 +249,77 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
     return siblings[key === 'ArrowUp' ? at - 1 : at + 1]?.id;
   };
 
+  // ---------- ações: as mesmas para teclado, barra flutuante e "+" (SPEC-002 §5.1) ----------
+  // Cada ação discreta é um passo próprio do desfazer, mesmo com cliques rápidos
+  // (o UndoManager junta alterações a menos de 400 ms). O texto de um nó recém-criado
+  // continua no mesmo passo da criação.
+  const newStep = () => undo?.stopCapturing();
+
   const createNode = (parentId: string, afterId?: string) => {
     const id = crypto.randomUUID();
     pendingRef.current = '';
+    newStep();
     if (addNode(doc, { id, parentId, afterId }, LOCAL_ORIGIN)) {
       onSelect(id);
       setEditing({ id, draft: '' });
+      focusCanvas(); // guarda as teclas até o campo do nó novo ganhar foco
     }
   };
 
+  const actions: NodeActions = {
+    createChild: (id) => {
+      if (canEdit && nodes[id]) createNode(id);
+    },
+    createSibling: (id) => {
+      const node = nodes[id];
+      if (!canEdit || !node) return;
+      if (node.parentId) createNode(node.parentId, node.id);
+      else createNode(node.id); // na raiz, irmão vira filho
+    },
+    removeNode: (id) => {
+      const node = nodes[id];
+      if (!canEdit || !node?.parentId) return;
+      const siblings = index.get(node.parentId) ?? [];
+      const at = siblings.findIndex((s) => s.id === node.id);
+      newStep();
+      deleteBranch(doc, node.id, LOCAL_ORIGIN);
+      onSelect(siblings[at + 1]?.id ?? siblings[at - 1]?.id ?? node.parentId);
+      focusCanvas();
+    },
+    toggleCollapse: (id) => {
+      const node = nodes[id];
+      if (canEdit && node && (index.get(id)?.length ?? 0) > 0) {
+        newStep();
+        updateNode(doc, id, { collapsed: !node.collapsed }, LOCAL_ORIGIN);
+      }
+    },
+    toggleBold: (id) => {
+      const node = nodes[id];
+      if (!canEdit || !node) return;
+      newStep();
+      updateNode(doc, id, { bold: !node.bold }, LOCAL_ORIGIN);
+    },
+    setColor: (id, color) => {
+      if (!canEdit) return;
+      newStep();
+      updateNode(doc, id, { color }, LOCAL_ORIGIN);
+    },
+    setLink: (id, link) => {
+      if (!canEdit) return false;
+      newStep();
+      return updateNode(doc, id, { link }, LOCAL_ORIGIN);
+    },
+    openNote: (id) => {
+      onSelect(id);
+      onOpenNote(id);
+    },
+    focusCanvas,
+  };
+  actionsRef.current = actions;
+
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    // Teclas num botão, link ou campo (barra, controles) não viram atalho do mapa.
+    if (e.target !== wrapperRef.current && (e.target as HTMLElement).closest('button, a, input, textarea, form')) return;
     if (editing) {
       // Campo de texto ainda sem foco: guarda o que foi digitado.
       if (e.target === wrapperRef.current && !e.ctrlKey && !e.metaKey && (e.key.length === 1 || e.key === 'Enter')) {
@@ -240,26 +359,22 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
 
     if (e.key === 'Tab') {
       e.preventDefault();
-      createNode(node.id);
+      actions.createChild(node.id);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (node.parentId) createNode(node.parentId, node.id);
-      else createNode(node.id); // na raiz, Enter cria filho
+      actions.createSibling(node.id); // na raiz, Enter cria filho
     } else if ((e.key === 'Delete' || e.key === 'Backspace') && node.parentId) {
       e.preventDefault();
-      const siblings = index.get(node.parentId) ?? [];
-      const at = siblings.findIndex((s) => s.id === node.id);
-      deleteBranch(doc, node.id, LOCAL_ORIGIN);
-      onSelect(siblings[at + 1]?.id ?? siblings[at - 1]?.id ?? node.parentId);
+      actions.removeNode(node.id);
     } else if (e.key === 'F2') {
       e.preventDefault();
       setEditing({ id: node.id, draft: null });
     } else if (e.key === ' ') {
       e.preventDefault();
-      if ((index.get(node.id)?.length ?? 0) > 0) updateNode(doc, node.id, { collapsed: !node.collapsed }, LOCAL_ORIGIN);
+      actions.toggleCollapse(node.id);
     } else if (mod && (e.key === 'b' || e.key === 'B')) {
       e.preventDefault();
-      updateNode(doc, node.id, { bold: !node.bold }, LOCAL_ORIGIN);
+      actions.toggleBold(node.id);
     } else if (e.key.length === 1 && !mod && !e.altKey) {
       // Digitar com um nó selecionado começa a editar, substituindo o texto.
       e.preventDefault();
@@ -275,6 +390,7 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
 
     const target = getIntersectingNodes(dragged).find((n) => !isInBranch(nodes, dragged.id, n.id));
     if (target) {
+      newStep();
       moveNode(doc, dragged.id, target.id, undefined, LOCAL_ORIGIN);
       return;
     }
@@ -286,8 +402,11 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
         .filter((p): p is PositionedNode => !!p && p.side === side),
     );
     const before = siblings.filter((s) => s.y < dragged.position.y).at(-1);
+    newStep();
     moveNode(doc, dragged.id, node.parentId, before?.id ?? null, LOCAL_ORIGIN);
   };
+
+  const selectedNode = selectedId ? nodes[selectedId] : undefined;
 
   return (
     <div
@@ -306,25 +425,46 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
         deleteKeyCode={null}
         selectionKeyCode={null}
         multiSelectionKeyCode={null}
-        onNodeClick={(_, n) => {
+        onNodeClick={(e, n) => {
+          // Duplo clique detectado aqui: o primeiro clique troca a seleção e o
+          // navegador pode entregar o dblclick ao fundo, não ao nó (SPEC-002 §5.8).
+          const last = lastClick.current;
+          lastClick.current = { id: n.id, at: e.timeStamp };
+          if (canEdit && last?.id === n.id && e.timeStamp - last.at < DOUBLE_CLICK_MS) {
+            lastClick.current = null;
+            onSelect(n.id);
+            setEditing({ id: n.id, draft: null });
+            return;
+          }
           onSelect(n.id);
           focusCanvas();
         }}
         onNodeDoubleClick={(_, n) => canEdit && setEditing({ id: n.id, draft: null })}
+        zoomOnDoubleClick={false}
         onNodeDragStart={(_, n) => onSelect(n.id)}
         onNodeDrag={(_, n) => setDrag({ id: n.id, x: n.position.x, y: n.position.y })}
         onNodeDragStop={onNodeDragStop}
+        onNodesChange={onNodesChange}
         onPaneClick={() => {
           onSelect(null);
           focusCanvas();
         }}
         fitView
-        fitViewOptions={{ padding: 0.25, maxZoom: 1.2 }}
+        fitViewOptions={FIT_VIEW_OPTIONS}
         minZoom={0.15}
         maxZoom={2.5}
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="var(--grid)" />
-        <Controls showInteractive={false} position="bottom-left" />
+        <CanvasControls undo={undo} canEdit={canEdit} onAfter={focusCanvas} />
+        {selectedNode && !editing && !drag && (
+          <NodeActionBar
+            key={selectedNode.id}
+            node={selectedNode}
+            canEdit={canEdit}
+            hasChildren={(index.get(selectedNode.id)?.length ?? 0) > 0}
+            actions={actions}
+          />
+        )}
       </ReactFlow>
     </div>
   );

@@ -85,7 +85,7 @@ test('MVP: acesso, mapa colaborativo e permissões', async ({ browser }) => {
   // 5) Ana compartilha com o admin como Editor.
   await ana.getByRole('button', { name: 'Compartilhar' }).click();
   await ana.getByLabel('Convidar pelo e-mail').fill('admin@paglamp.com.br');
-  await ana.getByRole('button', { name: 'Adicionar' }).click();
+  await ana.getByRole('button', { name: 'Adicionar', exact: true }).click();
   await expect(ana.locator('dialog').getByText('Admin Paglamp')).toBeVisible();
   await shot(ana, '06-compartilhar');
   await ana.getByRole('button', { name: 'Fechar' }).click();

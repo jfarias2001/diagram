@@ -1,5 +1,5 @@
 import * as Y from 'yjs';
-import { type MindMapNode, NODE_TEXT_MAX } from './document.js';
+import { isSafeLink, type MindMapNode, NODE_LINK_MAX, NODE_NOTE_MAX, NODE_TEXT_MAX } from './document.js';
 import { branchIds, childrenIndex, computeTreeRepairs, findRoot, isInBranch, type NodeRecord, orderBetween } from './tree.js';
 
 // Acesso ao Y.Doc do mapa mental (SPEC-001 §2.2). Toda escrita passa por aqui.
@@ -28,6 +28,11 @@ function readNode(id: string, y: YNode): MindMapNode | null {
   if (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)) node.color = color;
   if (y.get('bold') === true) node.bold = true;
   if (y.get('collapsed') === true) node.collapsed = true;
+  const note = y.get('note');
+  if (typeof note === 'string' && note) node.note = note.slice(0, NODE_NOTE_MAX);
+  // Link inválido gravado direto no Y.Doc nunca chega a um href (SPEC-002 §6).
+  const link = y.get('link');
+  if (typeof link === 'string' && link.length <= NODE_LINK_MAX && isSafeLink(link)) node.link = link;
   return node;
 }
 
@@ -50,6 +55,8 @@ function writeNode(map: Y.Map<YNode>, node: MindMapNode) {
   if (node.color) y.set('color', node.color);
   if (node.bold) y.set('bold', true);
   if (node.collapsed) y.set('collapsed', true);
+  if (node.note) y.set('note', node.note.slice(0, NODE_NOTE_MAX));
+  if (node.link && isSafeLink(node.link)) y.set('link', node.link);
   map.set(node.id, y);
 }
 
@@ -109,16 +116,26 @@ export function deleteBranch(doc: Y.Doc, id: string, origin?: unknown): boolean 
   return true;
 }
 
-export type NodePatch = Partial<Pick<MindMapNode, 'text' | 'color' | 'bold' | 'collapsed'>>;
+export type NodePatch = Partial<Pick<MindMapNode, 'text' | 'color' | 'bold' | 'collapsed' | 'note' | 'link'>>;
 
+/** Aplica o patch. Link inválido não grava nada e retorna false. */
 export function updateNode(doc: Y.Doc, id: string, patch: NodePatch, origin?: unknown): boolean {
   const y = nodesMap(doc).get(id);
   if (!y) return false;
+  if (patch.link && (patch.link.length > NODE_LINK_MAX || !isSafeLink(patch.link))) return false;
   doc.transact(() => {
     if (patch.text !== undefined) y.set('text', patch.text.slice(0, NODE_TEXT_MAX));
     if (patch.color !== undefined) {
       if (patch.color && /^#[0-9a-fA-F]{6}$/.test(patch.color)) y.set('color', patch.color);
       else y.delete('color');
+    }
+    if (patch.note !== undefined) {
+      if (patch.note) y.set('note', patch.note.slice(0, NODE_NOTE_MAX));
+      else y.delete('note');
+    }
+    if (patch.link !== undefined) {
+      if (patch.link) y.set('link', patch.link);
+      else y.delete('link');
     }
     for (const flag of ['bold', 'collapsed'] as const) {
       if (patch[flag] === undefined) continue;
