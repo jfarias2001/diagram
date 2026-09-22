@@ -5,7 +5,7 @@
 | Status | **Aprovado** (2026-09-22) |
 | Autor | Claude (a partir do pedido do usuário) |
 | Data | 2026-09-22 |
-| SPEC | (quando existir) |
+| SPEC | [SPEC-003](../spec/SPEC-003-editor-fluxogramas.md) |
 
 ## 1. Problema
 Hoje só existem mapas mentais, que são sempre uma árvore a partir de um tópico central. A equipe também precisa desenhar **processos** (atendimento, compras, produção, aprovação), com decisões "sim/não", caminhos que se juntam e voltam — coisa que uma árvore não representa. Para isso usam ferramentas externas ou papel.

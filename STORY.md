@@ -28,7 +28,34 @@
 - **Fase:** MVP (PRD-001/SPEC-001) e PRD-002/SPEC-002 (mapa com o mouse, notas e links) **implementados e testados**; ainda não publicados na VPS. PRDs 003–005 aprovados, sem SPEC.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** SPEC-003 (fluxogramas) para aprovação; em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+- **Próximo passo:** aprovação da SPEC-003 (fluxogramas, rascunho); em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+
+---
+
+## 2026-09-22 — SPEC-003 (fluxogramas) escrita
+**Tipo:** docs
+**Refs:** PRD-003, SPEC-003, ADR-001
+
+**O que mudou**
+- **SPEC-003** em rascunho:
+  - fluxograma como `Document` `DIAGRAM`, sem migration;
+  - Y.Doc com os mapas planos `shapes` e `edges`;
+  - apagar forma apaga os conectores dela em cascata, e os conectores soltos são reparados;
+  - editor React Flow com paleta de 9 formas, conectores com rótulo, `QuickShapeMenu` ao soltar a seta no vazio, grade, guias de alinhamento, seleção múltipla e copiar/colar validado com Zod;
+  - "Organizar" com `elkjs` carregado sob demanda;
+  - painel renomeado para "Documentos", com filtro por tipo.
+
+**Revisão de segurança**
+- Só documentação. A SPEC-003 §6 cobre:
+  - IDOR, com a matriz de permissões rodando também com `DIAGRAM`;
+  - leitor forjando formas pelo WebSocket;
+  - XSS pelo texto e injeção de CSS pelas cores;
+  - colagem de JSON malicioso ou gigante;
+  - conectores soltos;
+  - `type` forjado na criação.
+
+**Pendências / próximos passos**
+- [ ] Aprovação da SPEC-003.
 
 ---
 
