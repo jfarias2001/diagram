@@ -1,6 +1,15 @@
 import type { MindMapNode } from '@diagram/shared';
 import { describe, expect, it } from 'vitest';
-import { branchIds, estimateSize, isInBranch, layoutMindMap, orderBetween, resolvePositions } from './layout';
+import {
+  branchIds,
+  estimateSize,
+  isInBranch,
+  layoutMindMap,
+  offsetsForSoloMove,
+  orderBetween,
+  type PositionedNode,
+  resolvePositions,
+} from './layout';
 
 function map(...list: Array<[string, string | null, number]>): Record<string, MindMapNode> {
   return Object.fromEntries(list.map(([id, parentId, order]) => [id, { id, parentId, order, text: id }]));
@@ -129,5 +138,74 @@ describe('estimateSize por formato (SPEC-006 §5.4)', () => {
     expect(estimateSize('Um tópico qualquer', false, 0, 'ellipse').width).toBeGreaterThan(base.width);
     expect(estimateSize('Um tópico qualquer', false, 0, 'hexagon').width).toBeGreaterThan(base.width);
     expect(estimateSize('Um tópico qualquer', false, 0, 'ellipse').height).toBeGreaterThan(base.height);
+  });
+});
+
+describe('offsetsForSoloMove (SPEC-007 §5.1)', () => {
+  /** Posições resolvidas de um mapa, por id. */
+  function positionsOf(nodes: Record<string, MindMapNode>): Map<string, PositionedNode> {
+    return new Map(resolvePositions(nodes).map((p) => [p.id, p]));
+  }
+
+  it('o bloco vai para onde foi solto e os filhos ficam exatamente onde estavam', () => {
+    const nodes = map(['root', null, 0], ['a', 'root', 1], ['a1', 'a', 1], ['a2', 'a', 2]);
+    const antes = positionsOf(nodes);
+    const destino = { x: (antes.get('a')?.x ?? 0) + 220, y: (antes.get('a')?.y ?? 0) - 140 };
+
+    const entries = offsetsForSoloMove(antes, 'a', 'root', ['a1', 'a2'], destino);
+    expect(entries).toHaveLength(3);
+
+    // Aplica o que seria gravado e resolve de novo.
+    const movidos = { ...nodes };
+    for (const { id, offset } of entries) movidos[id] = { ...movidos[id]!, dx: offset.dx, dy: offset.dy };
+    const depois = positionsOf(movidos);
+
+    expect(depois.get('a')?.x).toBeCloseTo(destino.x, 6);
+    expect(depois.get('a')?.y).toBeCloseTo(destino.y, 6);
+    for (const filho of ['a1', 'a2']) {
+      expect(depois.get(filho)?.x).toBeCloseTo(antes.get(filho)?.x ?? Number.NaN, 6);
+      expect(depois.get(filho)?.y).toBeCloseTo(antes.get(filho)?.y ?? Number.NaN, 6);
+    }
+  });
+
+  it('a raiz não compensa nada: o mapa inteiro acompanha', () => {
+    const nodes = map(['root', null, 0], ['a', 'root', 1]);
+    const antes = positionsOf(nodes);
+    const entries = offsetsForSoloMove(antes, 'root', null, [], { x: 50, y: 70 });
+    expect(entries).toEqual([{ id: 'root', offset: { dx: 50, dy: 70 } }]);
+  });
+
+  it('bloco sem filhos gera uma entrada só', () => {
+    const nodes = map(['root', null, 0], ['a', 'root', 1]);
+    expect(offsetsForSoloMove(positionsOf(nodes), 'a', 'root', [], { x: 10, y: 10 })).toHaveLength(1);
+  });
+
+  it('filho de ramo recolhido (não desenhado) é ignorado', () => {
+    const nodes = map(['root', null, 0], ['a', 'root', 1], ['a1', 'a', 1]);
+    const posicoes = positionsOf({ ...nodes, a: { ...nodes.a!, collapsed: true } });
+    const entries = offsetsForSoloMove(posicoes, 'a', 'root', ['a1'], { x: 10, y: 10 });
+    expect(entries.map((e) => e.id)).toEqual(['a']);
+  });
+
+  it('bloco que sumiu no meio do arrasto não gera escrita', () => {
+    expect(offsetsForSoloMove(new Map(), 'fantasma', 'root', [], { x: 0, y: 0 })).toEqual([]);
+  });
+});
+
+describe('estimateSize por fonte (SPEC-007 §5.4)', () => {
+  it('fonte condensada ocupa menos e monoespaçada ocupa mais', () => {
+    const texto = 'Planejamento de campanha';
+    const padrao = estimateSize(texto, false, 0, 'rounded', 1).width;
+    const condensada = estimateSize(texto, false, 0, 'rounded', 0.82).width;
+    const mono = estimateSize(texto, false, 0, 'rounded', 1.12).width;
+    expect(condensada).toBeLessThan(padrao);
+    expect(mono).toBeGreaterThan(padrao);
+  });
+
+  it('o mapa inteiro acompanha o fator da fonte', () => {
+    const largoPadrao = layoutMindMap(sample, 1);
+    const largoCondensado = layoutMindMap(sample, 0.82);
+    const xA = (list: typeof largoPadrao) => list.find((p) => p.id === 'a1')?.x ?? 0;
+    expect(Math.abs(xA(largoCondensado))).toBeLessThanOrEqual(Math.abs(xA(largoPadrao)));
   });
 });

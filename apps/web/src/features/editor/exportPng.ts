@@ -29,6 +29,14 @@ export async function exportCanvasPng(nodes: Node[], title: string): Promise<voi
   const board = viewport.closest<HTMLElement>('[data-board]') ?? document.body;
   const background = getComputedStyle(board).getPropertyValue('--canvas').trim() || '#ffffff';
 
+  // A fonte do documento pode ter acabado de ser baixada: sem esta espera, o
+  // PNG sai com a fonte substituída (SPEC-007 §5.8).
+  try {
+    await document.fonts?.ready;
+  } catch {
+    // Navegador sem a API: segue com o que estiver carregado.
+  }
+
   const dataUrl = await toPng(viewport, {
     backgroundColor: background,
     width,

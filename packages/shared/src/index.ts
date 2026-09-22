@@ -5,5 +5,6 @@ export * from './health.js';
 export * from './restore.js';
 export * from './versions.js';
 export * from './schemas.js';
+export * from './theme.js';
 export * from './tree.js';
 export * from './ydoc.js';

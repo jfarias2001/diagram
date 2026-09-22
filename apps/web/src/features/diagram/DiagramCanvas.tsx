@@ -11,6 +11,7 @@ import {
   type Shape,
   SHAPE_DEFAULT_SIZE,
   type ShapeKind,
+  readableInk,
   updateEdges,
   updateShapes,
 } from '@diagram/shared';
@@ -30,6 +31,7 @@ import {
 } from '@xyflow/react';
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
+import { type BoardTheme, mix } from '../editor/boardTheme';
 import { FIT_VIEW_OPTIONS } from '../editor/CanvasControls';
 import { stableData } from '../editor/stableData';
 import { LOCAL_ORIGIN } from '../editor/useMindMap';
@@ -42,7 +44,7 @@ import { QuickShapeMenu } from './QuickShapeMenu';
 import { EdgeSelectionBar, ShapeSelectionBar } from './SelectionBar';
 import { type ShapeFlowNode, ShapeNode, type ShapeNodeData } from './ShapeNode';
 import { ShapePalette } from './ShapePalette';
-import { DEFAULT_FILL, DEFAULT_STROKE } from './shapes';
+
 
 const nodeTypes = { shape: ShapeNode };
 const edgeTypes = { flow: FlowEdge };
@@ -63,12 +65,24 @@ interface Props {
   undo: Y.UndoManager | null;
   /** Guarda uma versão antes de uma operação grande (SPEC-005 §5.3). */
   onCheckpoint?: (name: string) => void;
+  /** Tema do documento (SPEC-007 §5.4). */
+  board: BoardTheme;
 }
 
 const newId = () => crypto.randomUUID();
 const snapToGridValue = (v: number) => Math.round(v / GRID) * GRID;
 
-export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpoint }: Props) {
+export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpoint, board }: Props) {
+  const theme = board.theme;
+  // Padrões do tema para quem não escolheu cor (SPEC-007 §5.3).
+  const defaults = useMemo(
+    () => ({
+      fill: theme.surface,
+      stroke: mix(theme.ink, theme.canvas, 0.35),
+      ink: theme.ink,
+    }),
+    [theme],
+  );
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, getZoom } = useReactFlow();
   const [selection, setSelection] = useState<{ shapes: string[]; edges: string[] }>({ shapes: [], edges: [] });
@@ -311,8 +325,9 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
         data: stableData(dataCache.current, shape.id, {
           kind: shape.kind,
           text: shape.text,
-          fill: shape.fill ?? DEFAULT_FILL,
-          stroke: shape.stroke ?? DEFAULT_STROKE,
+          fill: shape.fill ?? defaults.fill,
+          stroke: shape.stroke ?? defaults.stroke,
+          ink: shape.ink ?? (shape.fill ? readableInk(shape.fill) : defaults.ink),
           bold: shape.bold ?? false,
           editing: editing?.kind === 'shape' && editing.id === shape.id,
           draft: editing?.kind === 'shape' && editing.id === shape.id ? editing.draft : null,
@@ -323,12 +338,12 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
       });
     }
     return list;
-  }, [diagram.shapes, draft, selection.shapes, canEdit, editing, peers, commitShapeText]);
+  }, [diagram.shapes, draft, selection.shapes, canEdit, editing, peers, commitShapeText, defaults]);
 
   const edges = useMemo(() => {
     const selected = new Set(selection.edges);
     return Object.values(diagram.edges).map<DiagramFlowEdge>((edge) => {
-      const color = edge.color ?? DEFAULT_STROKE;
+      const color = edge.color ?? defaults.stroke;
       const marker = { type: MarkerType.ArrowClosed, color, ...ARROW_SIZE };
       return {
         id: edge.id,
@@ -354,7 +369,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
         }),
       };
     });
-  }, [diagram.edges, selection.edges, canEdit, editing, commitEdgeLabel, editEdgeLabel]);
+  }, [diagram.edges, selection.edges, canEdit, editing, commitEdgeLabel, editEdgeLabel, defaults]);
 
   // ---------- arrastar, redimensionar, conectar ----------
   const draftRef = useRef(draft);
@@ -657,6 +672,8 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
           {showShapeBar && (
             <ShapeSelectionBar
               shapes={selectedShapes}
+              palette={theme.branches}
+              defaults={defaults}
               actions={{
                 setFill: (fill) => {
                   newStep();
@@ -665,6 +682,10 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
                 setStroke: (stroke) => {
                   newStep();
                   updateShapes(doc, selection.shapes, { stroke }, LOCAL_ORIGIN);
+                },
+                setInk: (ink) => {
+                  newStep();
+                  updateShapes(doc, selection.shapes, { ink }, LOCAL_ORIGIN);
                 },
                 toggleBold: () => {
                   newStep();
@@ -680,6 +701,8 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
         {canEdit && selectedEdge && !editing && (
           <EdgeSelectionBar
             edge={selectedEdge}
+            palette={theme.branches}
+            defaultColor={defaults.stroke}
             actions={{
               setLine: (line) => {
                 newStep();

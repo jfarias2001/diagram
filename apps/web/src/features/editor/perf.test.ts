@@ -1,6 +1,15 @@
-import { addNode, createMindMapDoc, readNodes, setNodeOffset, updateNode } from '@diagram/shared';
+import {
+  addNode,
+  childrenIndex,
+  createMindMapDoc,
+  readNodes,
+  setDocumentStyle,
+  setNodeOffset,
+  setNodeOffsets,
+  updateNode,
+} from '@diagram/shared';
 import { describe, expect, it } from 'vitest';
-import { layoutMindMap, resolvePositions } from './layout';
+import { layoutMindMap, offsetsForSoloMove, resolvePositions } from './layout';
 
 // SPEC-001 §7 — orçamento de desempenho: 1.000+ nós sem travar a digitação.
 // Cada tecla digitada num nó dispara readNodes + layout; os dois juntos
@@ -64,5 +73,53 @@ describe('desempenho com posições manuais', () => {
     doc.on('update', () => updates++);
     setNodeOffset(doc, 'n0', { dx: 250, dy: 120 });
     expect(updates).toBe(1);
+  });
+});
+
+// SPEC-007 §7 — o tema e o arrasto solo não podem custar o orçamento.
+describe('desempenho do tema e do arrasto solo (SPEC-007)', () => {
+  it('aplicar um tema num mapa de 1.000 blocos é uma escrita só', () => {
+    const doc = bigMap(1000);
+    let updates = 0;
+    doc.on('update', () => updates++);
+    setDocumentStyle(doc, { theme: 'oceano' });
+    expect(updates).toBe(1);
+  });
+
+  it('arrastar um bloco com 500 filhos diretos grava tudo numa transação', () => {
+    const doc = createMindMapDoc('Mapa');
+    addNode(doc, { id: 'pai', parentId: 'root', text: 'Pai' });
+    for (let i = 0; i < 500; i++) addNode(doc, { id: `f${i}`, parentId: 'pai', text: `Filho ${i}` });
+
+    const nodes = readNodes(doc);
+    const positions = new Map(resolvePositions(nodes).map((p) => [p.id, p]));
+    const childIds = (childrenIndex(nodes).get('pai') ?? []).map((c) => c.id);
+
+    const start = performance.now();
+    const entries = offsetsForSoloMove(positions, 'pai', 'root', childIds, { x: 400, y: 200 });
+    const elapsed = performance.now() - start;
+
+    let updates = 0;
+    doc.on('update', () => updates++);
+    setNodeOffsets(doc, entries, undefined);
+
+    expect(entries).toHaveLength(501);
+    expect(updates).toBe(1);
+    expect(elapsed).toBeLessThan(50);
+  });
+
+  it('trocar a fonte refaz o layout de 1.000 blocos dentro do orçamento', () => {
+    const doc = bigMap(1000);
+    const nodes = readNodes(doc);
+    resolvePositions(nodes, 1);
+
+    const runs: number[] = [];
+    for (const factor of [0.78, 0.82, 1, 1.05, 1.12, 0.97, 1.02, 1, 0.82, 1.12]) {
+      const start = performance.now();
+      resolvePositions(nodes, factor);
+      runs.push(performance.now() - start);
+    }
+    runs.sort((a, b) => a - b);
+    expect(runs[Math.floor(runs.length / 2)]!).toBeLessThan(50);
   });
 });

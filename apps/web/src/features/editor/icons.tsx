@@ -172,3 +172,40 @@ export const IconMoon = (p: IconProps) => (
     <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
   </Svg>
 );
+
+export const IconScissors = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="6" cy="6" r="3" />
+    <circle cx="6" cy="18" r="3" />
+    <path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12" />
+  </Svg>
+);
+
+export const IconBranch = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="5" cy="12" r="2" />
+    <circle cx="19" cy="6" r="2" />
+    <circle cx="19" cy="18" r="2" />
+    <path d="M7 12h4c0-3 1-6 6-6M7 12h4c0 3 1 6 6 6" />
+  </Svg>
+);
+
+export const IconTheme = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 3a9 9 0 0 0 0 18" fill="currentColor" stroke="none" opacity=".45" />
+  </Svg>
+);
+
+export const IconFont = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 19 10 5l6 14M6.5 14h7M17 19h4" />
+  </Svg>
+);
+
+export const IconInk = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 17 10 5l5 12M7 13h6" />
+    <path d="M4 21h16" strokeWidth={3} />
+  </Svg>
+);

@@ -25,10 +25,46 @@
 
 ## Estado atual (atualize a cada entrada)
 
-- **Fase:** SPEC-001 a 006 **todas implementadas e testadas** (274 testes + 8 E2E); ainda não publicadas na VPS.
+- **Fase:** SPEC-001 a 007 **todas implementadas e testadas** (329 testes + 9 E2E); ainda não publicadas na VPS.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
 - **Próximo passo:** primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+
+---
+
+## 2026-09-22 — Identidade visual: temas do documento, fontes, cores livres, arrasto natural e religar (SPEC-007)
+**Tipo:** feature, fix
+**Refs:** PRD-007, SPEC-007
+
+**O que mudou**
+- **Arrastar passou a mover só o bloco.** A linha que liga ao pai **deixou de sumir** durante o arrasto (era uma condição `!isDragging` que apagava a aresta) e agora estica junto. Ao soltar, o editor grava o deslocamento do bloco **e o deslocamento compensatório de cada filho direto**, numa transação só: matematicamente `pos'(filho) = pos(filho)`, então o ramo fica exatamente onde estava. `Shift` (ou o botão "leva o ramo junto" na barra) volta ao comportamento da SPEC-006, e arrastar a raiz continua movendo o mapa inteiro. **Isto substitui a regra da SPEC-006 §5.1.**
+- **Cortar e religar** (pedido durante a aprovação do PRD): clicar na linha mostra a tesoura; `Ctrl+X` faz o mesmo pelo teclado. O mapa entra em "modo religar", dá para navegar e dar zoom até um pai do outro lado do mapa, e o clique (ou `Ctrl+V`) religa. `Esc` cancela sem escrever nada. A ligação velha **só cai quando a nova existe** (`reparentNode`, uma transação): o documento nunca guarda bloco órfão, e um `Ctrl+Z` desfaz tudo. Religar num descendente é recusado pela interface **e** pelo modelo.
+- **Tema é do documento, não do navegador.** Um `Y.Map` novo, `style`, guarda só `theme`, `font` e `background` — **ids de listas fechadas e um hex**. As 8 paletas (Paglamp, Aurora, Oceano, Pôr do sol, Grafite, Papel, Caderno, Neon) são código, então aplicar um tema num mapa de 1.000 blocos é **uma escrita** e um `Ctrl+Z`. O tema viaja com o documento, sincroniza em tempo real e **entra no histórico de versões** (olhar uma versão antiga mostra a aparência daquela época). O interruptor sol/lua pessoal da SPEC-006 deixou de existir.
+- **Cores livres (sRGB inteiro)** para contorno, preenchimento e agora também **cor do texto** (`ink`, campo novo no nó e na forma): área de saturação/brilho, barra de matiz, código hexadecimal, cores do tema e as usadas recentemente. Vale nos dois editores. O aviso de contraste **avisa e deixa passar** — é escolha de quem edita.
+- **8 fontes** auto-hospedadas (`@fontsource`), carregadas **sob demanda**: o build gera um pedaço por família, então quem abre um mapa com a fonte padrão não baixa as outras sete. Nada de CDN — a CSP `font-src 'self'` continuou intacta. Cada fonte tem um fator de largura que entra no `estimateSize`, senão a condensada deixaria folga sobrando e a monoespaçada deixaria texto vazando.
+- **Modo claro deixou de ser branco puro** (`#f2f1ed` no quadro, `#fbfaf8` nas superfícies): o painel herdou o mesmo conforto, mas não foi redesenhado.
+- **Linhas com cara de mapa mental:** a ligação virou um polígono que **afina** do pai para o filho (`taperedPath`, função pura testada), com a espessura caindo por nível.
+- **Dois problemas de barra achados pelo E2E, corrigidos na raiz:** a barra do bloco ficava **atrás do cabeçalho** quando o bloco estava no topo (agora ela desce sozinha) e o seletor de cor, bem mais alto que a paleta antiga, **cobria o bloco que se estava pintando** (agora abre do lado oposto ao bloco, fora do fluxo).
+- **A fonte do documento vale só para o conteúdo:** blocos e rótulos de conector. A barra, os painéis e os diálogos continuam na fonte do sistema mesmo com o mapa em manuscrita — o E2E verifica os dois lados.
+- **Sem migration, sem rota nova e sem variável de ambiente nova.** Documentos antigos abrem no tema Paglamp, exatamente como antes.
+- **Testes:** 329 de unidade e integração (mais 55) e 9 E2E. Entre os novos: contraste AA de **todos** os temas (a paleta antiga tinha duas cores abaixo de 4,5:1 e foi corrigida), `readStyle` ignorando lixo forjado, `reparentNode` (ciclo, raiz, um Ctrl+Z), `offsetsForSoloMove` com a invariante "o filho não se mexe", conversões de cor, `taperedPath`, **o leitor forjando tema pelo WebSocket sendo descartado**, o tema voltando junto com a versão restaurada, e o E2E que arrasta, religa com `Esc` no meio, pinta por hexadecimal, troca tema e fonte, e confere que a leitora vê tudo sem poder mexer.
+
+**Revisão de segurança**
+- Checklist CLAUDE.md §9 revisada no que mudou:
+  - **Autorização:** nenhuma rota nova. Tema, fonte e cores são conteúdo do Y.Doc, então valem a marca `readOnly` do `onConnect` — leitor (direto ou herdado de pasta) que força um update em `style` tem a escrita descartada **no servidor** (teste novo pelo WebSocket, inclusive escrevendo cru no `Y.Map`).
+  - **Injeção/CSS (o risco desta entrega):** todo valor que vira CSS vem de **constante do código** (tema e fonte são ids de listas fechadas) ou de **hex validado na leitura**. Tema desconhecido cai no padrão; `background`, `ink`, `color` e `fill` fora de `#rrggbb` são ignorados na leitura **e** na escrita. Teste com `url(javascript:…)` e `#fff;position:fixed` escritos direto no documento.
+  - **Versões:** o estilo restaurado passa pelo mesmo leitor defensivo — lixo guardado numa versão antiga não volta (teste).
+  - **Área de transferência:** `Ctrl+X`/`Ctrl+V` do mapa são um recorte **interno**; não leem nem escrevem no clipboard do sistema, então não há superfície de colagem de conteúdo externo.
+  - **Rede:** as 7 famílias novas são arquivos servidos pelo próprio site; CSP inalterada, nenhum pedido externo em tempo de uso.
+  - **DoS:** aplicar tema é 1 escrita; o pior caso do arrasto é "1 + filhos diretos" numa transação (teste com 500 filhos).
+- `pnpm audit --prod`: **sem vulnerabilidades** (7 pacotes `@fontsource*` novos, só arquivos de fonte).
+
+**Pendências / próximos passos**
+- [ ] Criar e salvar temas próprios da empresa ficou fora (PRD-007 §8); só os 8 prontos.
+- [ ] Ícones/emoji dentro dos blocos continuam fora — é o item mais visível que ainda separa o editor da referência.
+- [ ] Tamanho de fonte por bloco e tema por usuário (quem gosta de escuro vê o documento claro) ficaram fora, de propósito.
+- [ ] A largura do texto ainda é **estimada**, não medida: fonte muito diferente pode deixar folga irregular.
+- [ ] Primeiro deploy na VPS e PRD de backup do banco (continua sendo o próximo passo real).
 
 ---
 

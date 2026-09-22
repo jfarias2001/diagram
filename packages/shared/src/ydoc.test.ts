@@ -13,8 +13,10 @@ import {
   moveSibling,
   nodesMap,
   readNodes,
+  reparentNode,
   repairTree,
   setNodeOffset,
+  setNodeOffsets,
   updateNode,
 } from './ydoc.js';
 
@@ -316,5 +318,118 @@ describe('readableInk (SPEC-006 §5.4)', () => {
 
   it('cor inválida não quebra o cálculo', () => {
     expect(readableInk('nope')).toBe(INK_ON_LIGHT);
+  });
+});
+
+describe('setNodeOffsets em lote (SPEC-007 §5.1)', () => {
+  it('grava vários deslocamentos numa transação só', () => {
+    const doc = sampleDoc();
+    let transactions = 0;
+    doc.on('afterTransaction', () => transactions++);
+    const gravados = setNodeOffsets(
+      doc,
+      [
+        { id: 'a', offset: { dx: 100, dy: 40 } },
+        { id: 'a1', offset: { dx: -20, dy: 10 } },
+      ],
+      LOCAL,
+    );
+    expect(gravados).toBe(2);
+    expect(transactions).toBe(1);
+    const nodes = readNodes(doc);
+    expect(nodes.a).toMatchObject({ dx: 100, dy: 40 });
+    expect(nodes.a1).toMatchObject({ dx: -20, dy: 10 });
+  });
+
+  it('entrada inválida é ignorada sem derrubar as boas', () => {
+    const doc = sampleDoc();
+    const gravados = setNodeOffsets(
+      doc,
+      [
+        { id: 'a', offset: { dx: 10, dy: 10 } },
+        { id: 'fantasma', offset: { dx: 5, dy: 5 } },
+        { id: 'b', offset: { dx: Number.NaN, dy: 0 } },
+        { id: 'a1', offset: { dx: 1e9, dy: 0 } },
+      ],
+      LOCAL,
+    );
+    expect(gravados).toBe(1);
+    const nodes = readNodes(doc);
+    expect(nodes.a).toMatchObject({ dx: 10, dy: 10 });
+    expect(nodes.b!.dx).toBeUndefined();
+    expect(nodes.a1!.dx).toBeUndefined();
+    expect(nodes.fantasma).toBeUndefined();
+  });
+
+  it('offset null apaga o deslocamento', () => {
+    const doc = sampleDoc();
+    setNodeOffsets(doc, [{ id: 'a', offset: { dx: 10, dy: 10 } }], LOCAL);
+    setNodeOffsets(doc, [{ id: 'a', offset: null }], LOCAL);
+    expect(readNodes(doc).a!.dx).toBeUndefined();
+  });
+});
+
+describe('reparentNode (SPEC-007 §5.2)', () => {
+  it('troca o pai, zera a posição manual e faz tudo numa transação', () => {
+    const doc = sampleDoc();
+    setNodeOffsets(doc, [{ id: 'a1', offset: { dx: 300, dy: 200 } }], LOCAL);
+    let transactions = 0;
+    doc.on('afterTransaction', () => transactions++);
+
+    expect(reparentNode(doc, 'a1', 'b', LOCAL)).toBe(true);
+    expect(transactions).toBe(1);
+    const nodes = readNodes(doc);
+    expect(nodes.a1!.parentId).toBe('b');
+    expect(nodes.a1!.dx).toBeUndefined();
+    expect(nodes.a1!.dy).toBeUndefined();
+  });
+
+  it('leva o ramo inteiro junto, com texto e cores', () => {
+    const doc = sampleDoc();
+    addNode(doc, { id: 'a1x', parentId: 'a1', text: 'Neto' });
+    updateNode(doc, 'a1', { fill: '#d0ebff', note: 'anotação' }, LOCAL);
+    reparentNode(doc, 'a1', 'b', LOCAL);
+    const nodes = readNodes(doc);
+    expect(nodes.a1).toMatchObject({ parentId: 'b', fill: '#d0ebff', note: 'anotação' });
+    expect(nodes.a1x!.parentId).toBe('a1'); // o ramo continua pendurado nele
+  });
+
+  it('recusa a raiz, alvo inexistente e ciclo', () => {
+    const doc = sampleDoc();
+    expect(reparentNode(doc, 'root', 'a', LOCAL)).toBe(false);
+    expect(reparentNode(doc, 'a', 'fantasma', LOCAL)).toBe(false);
+    expect(reparentNode(doc, 'a', 'a1', LOCAL)).toBe(false); // descendente
+    expect(reparentNode(doc, 'a', 'a', LOCAL)).toBe(false); // ele mesmo
+    expect(readNodes(doc).a!.parentId).toBe('root');
+  });
+
+  it('um Ctrl+Z devolve o nó ao pai anterior', () => {
+    const doc = sampleDoc();
+    const undo = new Y.UndoManager(nodesMap(doc), { trackedOrigins: new Set([LOCAL]) });
+    reparentNode(doc, 'a1', 'b', LOCAL);
+    expect(readNodes(doc).a1!.parentId).toBe('b');
+    undo.undo();
+    expect(readNodes(doc).a1!.parentId).toBe('a');
+  });
+});
+
+describe('cor do texto do bloco (SPEC-007 §2.2)', () => {
+  it('só aceita #rrggbb, na escrita e na leitura', () => {
+    const doc = sampleDoc();
+    updateNode(doc, 'a', { ink: '#112233' }, LOCAL);
+    expect(readNodes(doc).a!.ink).toBe('#112233');
+
+    updateNode(doc, 'a', { ink: 'red' }, LOCAL);
+    expect(readNodes(doc).a!.ink).toBeUndefined(); // valor inválido volta ao padrão
+
+    nodesMap(doc).get('a')!.set('ink', 'url(javascript:alert(1))');
+    expect(readNodes(doc).a!.ink).toBeUndefined();
+  });
+
+  it("ink: '' volta à cor sugerida", () => {
+    const doc = sampleDoc();
+    updateNode(doc, 'a', { ink: '#112233' }, LOCAL);
+    updateNode(doc, 'a', { ink: '' }, LOCAL);
+    expect(readNodes(doc).a!.ink).toBeUndefined();
   });
 });

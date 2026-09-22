@@ -97,10 +97,12 @@ test('mapa só com o mouse: barra, "+", duplo clique, nota e link; leitor só l�
   await admin.keyboard.press('Enter');
   await expect(node(admin, 'Fornecedores 2027')).toBeVisible();
 
-  // Cor do contorno pela barra (a partir da SPEC-006, o popover tem contorno e preenchimento).
+  // Cor do contorno pela barra (a partir da SPEC-007, é o seletor livre).
   await node(admin, 'Fornecedores 2027').click();
   await admin.getByRole('button', { name: 'Cores' }).click();
-  await admin.getByRole('button', { name: 'Contorno #2f9e44' }).click();
+  await admin.getByRole('tab', { name: 'Contorno' }).click();
+  await admin.getByLabel('Contorno: código hexadecimal').fill('#2f9e44');
+  await admin.getByLabel('Contorno: código hexadecimal').press('Enter');
   await expect(node(admin, 'Fornecedores 2027').locator('> div')).toHaveCSS('border-color', 'rgb(47, 158, 68)');
 
   // 4) Nota.

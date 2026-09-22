@@ -70,7 +70,7 @@ function FlowEdgeComponent({ id, data, selected, markerEnd, markerStart, ...prop
               <button
                 type="button"
                 onDoubleClick={() => data.canEdit && data.onEditLabel(id)}
-                className="cursor-default rounded border border-line bg-surface px-1.5 py-0.5 text-xs font-medium text-ink shadow-sm"
+                className="board-text cursor-default rounded border border-line bg-surface px-1.5 py-0.5 text-xs font-medium text-ink shadow-sm"
               >
                 {data.label}
               </button>

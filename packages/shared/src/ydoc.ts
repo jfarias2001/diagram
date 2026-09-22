@@ -11,6 +11,7 @@ import {
   NODE_TEXT_MAX,
   type NodeShape,
 } from './document.js';
+import { type DocumentStyle, documentStyleSchema, FONT_IDS, THEME_IDS } from './theme.js';
 import {
   branchIds,
   childrenIndex,
@@ -62,6 +63,8 @@ function readNode(id: string, y: YNode): MindMapNode | null {
   if (typeof shape === 'string' && (NODE_SHAPES as readonly string[]).includes(shape)) node.shape = shape as NodeShape;
   const fill = y.get('fill');
   if (typeof fill === 'string' && HEX_COLOR.test(fill)) node.fill = fill;
+  const ink = y.get('ink');
+  if (typeof ink === 'string' && HEX_COLOR.test(ink)) node.ink = ink;
   const offset = readOffset(y.get('dx'), y.get('dy'));
   if (offset) {
     node.dx = offset.dx;
@@ -98,6 +101,7 @@ function writeNode(map: Y.Map<YNode>, node: MindMapNode) {
   if (node.link && isSafeLink(node.link)) y.set('link', node.link);
   if (node.shape && (NODE_SHAPES as readonly string[]).includes(node.shape)) y.set('shape', node.shape);
   if (node.fill && HEX_COLOR.test(node.fill)) y.set('fill', node.fill);
+  if (node.ink && HEX_COLOR.test(node.ink)) y.set('ink', node.ink);
   const offset = readOffset(node.dx, node.dy);
   if (offset) {
     y.set('dx', offset.dx);
@@ -163,7 +167,7 @@ export function deleteBranch(doc: Y.Doc, id: string, origin?: unknown): boolean 
 }
 
 export type NodePatch = Partial<
-  Pick<MindMapNode, 'text' | 'color' | 'bold' | 'collapsed' | 'note' | 'link' | 'fill'>
+  Pick<MindMapNode, 'text' | 'color' | 'bold' | 'collapsed' | 'note' | 'link' | 'fill' | 'ink'>
 > & {
   /** `''` volta ao formato padrão, como `color: ''` volta à cor do ramo. */
   shape?: NodeShape | '';
@@ -177,7 +181,7 @@ export function updateNode(doc: Y.Doc, id: string, patch: NodePatch, origin?: un
   doc.transact(() => {
     if (patch.text !== undefined) y.set('text', patch.text.slice(0, NODE_TEXT_MAX));
     // `''` em qualquer cor volta ao padrão; valor inválido também não grava.
-    for (const key of ['color', 'fill'] as const) {
+    for (const key of ['color', 'fill', 'ink'] as const) {
       const value = patch[key];
       if (value === undefined) continue;
       if (value && HEX_COLOR.test(value)) y.set(key, value);
@@ -275,6 +279,142 @@ export function clearOffsets(doc: Y.Doc, rootId: string, origin?: unknown): numb
     }
   }, origin);
   return targets.length;
+}
+
+/**
+ * Grava vários deslocamentos de uma vez, numa transação só (SPEC-007 §5.1).
+ * É o que faz "arrastar move só o bloco": o nó ganha o deslocamento novo e cada
+ * filho direto ganha o deslocamento que o mantém parado — tudo em um Ctrl+Z.
+ * Entradas inválidas são ignoradas sem derrubar as outras.
+ */
+export function setNodeOffsets(
+  doc: Y.Doc,
+  entries: Array<{ id: string; offset: { dx: number; dy: number } | null }>,
+  origin?: unknown,
+): number {
+  const map = nodesMap(doc);
+  const valid = entries
+    .filter((e) => map.has(e.id))
+    .map((e) => ({ id: e.id, offset: e.offset ? readOffset(e.offset.dx, e.offset.dy) : null, clear: !e.offset }))
+    .filter((e) => e.clear || e.offset !== null);
+  if (valid.length === 0) return 0;
+  doc.transact(() => {
+    for (const entry of valid) {
+      const y = map.get(entry.id);
+      if (!y) continue;
+      if (entry.offset) {
+        y.set('dx', entry.offset.dx);
+        y.set('dy', entry.offset.dy);
+      } else {
+        y.delete('dx');
+        y.delete('dy');
+      }
+    }
+  }, origin);
+  return valid.length;
+}
+
+/**
+ * Troca o pai de um nó e o devolve à posição automática, numa transação só
+ * (SPEC-007 §5.2) — é o "cortar e religar" e também o soltar em cima de outro
+ * bloco. As guardas são as mesmas de `moveNode`: a raiz não se move, o alvo
+ * precisa existir e não pode estar dentro do próprio ramo (ciclo).
+ */
+export function reparentNode(doc: Y.Doc, id: string, newParentId: string, origin?: unknown): boolean {
+  const nodes = readNodes(doc);
+  const node = nodes[id];
+  if (!node || node.parentId === null || !nodes[newParentId]) return false;
+  if (isInBranch(nodes, id, newParentId)) return false;
+  const siblings = (childrenIndex(nodes).get(newParentId) ?? []).filter((s) => s.id !== id);
+  const order = orderBetween(siblings[siblings.length - 1]?.order, undefined);
+  doc.transact(() => {
+    const y = nodesMap(doc).get(id);
+    if (!y) return;
+    y.set('parentId', newParentId);
+    y.set('order', order);
+    y.delete('dx');
+    y.delete('dy');
+  }, origin);
+  return true;
+}
+
+/**
+ * Apaga as cores escolhidas à mão de um ramo inteiro (SPEC-007 §5.3), para o
+ * tema voltar a mandar em tudo. Uma transação = um Ctrl+Z. Não toca em texto,
+ * formato nem posição.
+ */
+export function clearNodeColors(doc: Y.Doc, rootId: string, origin?: unknown): number {
+  const nodes = readNodes(doc);
+  if (!nodes[rootId]) return 0;
+  const targets = branchIds(nodes, rootId).filter((id) => {
+    const node = nodes[id];
+    return node?.color !== undefined || node?.fill !== undefined || node?.ink !== undefined;
+  });
+  if (targets.length === 0) return 0;
+  doc.transact(() => {
+    const map = nodesMap(doc);
+    for (const id of targets) {
+      const y = map.get(id);
+      y?.delete('color');
+      y?.delete('fill');
+      y?.delete('ink');
+    }
+  }, origin);
+  return targets.length;
+}
+
+// ---------- estilo do documento (SPEC-007 §2.1) ----------
+
+export function styleMap(doc: Y.Doc): Y.Map<unknown> {
+  return doc.getMap<unknown>('style');
+}
+
+/**
+ * Estilo do documento, lido defensivamente: id fora da lista fechada e cor fora
+ * de `#rrggbb` são ignorados, então um cliente adulterado não injeta nada no CSS
+ * (CLAUDE.md §9). Campo ausente = o padrão do tema.
+ */
+export function readStyle(doc: Y.Doc): DocumentStyle {
+  const map = styleMap(doc);
+  const out: DocumentStyle = {};
+  const theme = map.get('theme');
+  if (typeof theme === 'string' && (THEME_IDS as readonly string[]).includes(theme)) {
+    out.theme = theme as DocumentStyle['theme'];
+  }
+  const font = map.get('font');
+  if (typeof font === 'string' && (FONT_IDS as readonly string[]).includes(font)) {
+    out.font = font as DocumentStyle['font'];
+  }
+  const background = map.get('background');
+  if (typeof background === 'string' && HEX_COLOR.test(background)) out.background = background;
+  return out;
+}
+
+/** Patch do estilo. `''` em qualquer campo volta ao padrão; valor inválido não grava. */
+export type StylePatch = { theme?: string; font?: string; background?: string };
+
+export function setDocumentStyle(doc: Y.Doc, patch: StylePatch, origin?: unknown): boolean {
+  const map = styleMap(doc);
+  const clean: Array<[keyof StylePatch, string | null]> = [];
+  for (const key of ['theme', 'font', 'background'] as const) {
+    const value = patch[key];
+    if (value === undefined) continue;
+    if (value === '') {
+      clean.push([key, null]);
+      continue;
+    }
+    const check = documentStyleSchema.safeParse({ [key]: value });
+    if (!check.success) return false;
+    clean.push([key, value]);
+  }
+  if (clean.length === 0) return false;
+  doc.transact(() => {
+    for (const [key, value] of clean) {
+      if (value === null) map.delete(key);
+      else map.set(key, value);
+    }
+  }, origin);
+  return true;
 }
 
 /** Troca a ordem com o irmão de cima ou de baixo (SPEC-006 §5.2). */

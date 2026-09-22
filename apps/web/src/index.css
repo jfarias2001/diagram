@@ -6,15 +6,19 @@
 /*
  * Tokens (SPEC-001 §5). Base grafite e sóbria; o único acento é o âmbar de
  * filamento — usado para foco e para o nó selecionado "aceso".
+ *
+ * SPEC-007 §5.4: o modo claro deixou de ser branco puro. O fundo é um cinza
+ * levemente quente e as superfícies ficam um tom acima — passar horas olhando
+ * um quadro branco de verdade cansa a vista.
  */
 :root {
-  --canvas: #f6f7f9;
-  --surface: #ffffff;
-  --surface-2: #f0f2f5;
+  --canvas: #f2f1ed;
+  --surface: #fbfaf8;
+  --surface-2: #ecebe5;
   --ink: #1b2230;
-  --muted: #667085;
-  --line: #e3e6eb;
-  --grid: #d5d9e0;
+  --muted: #676d78;
+  --line: #e1dfd8;
+  --grid: #d3d0c8;
   --filament: #f2b705;
   --filament-soft: rgb(242 183 5 / 0.28);
   --filament-ink: #7a5800;
@@ -26,8 +30,8 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --canvas: #12151b;
-    --surface: #1a1f28;
-    --surface-2: #222835;
+    --surface: #1c212a;
+    --surface-2: #262c38;
     --ink: #e8ebf0;
     --muted: #97a0af;
     --line: #2c3340;
@@ -42,42 +46,31 @@
 }
 
 /*
- * Tema do quadro (SPEC-006 §5.5). Os mesmos tokens, redefinidos DENTRO do
- * elemento do quadro: o painel, o cabeçalho e os diálogos continuam seguindo
- * o sistema. `color-scheme` acerta as barras de rolagem de dentro do quadro.
+ * Quadro do editor (SPEC-007 §5.4). As cores e a fonte vêm do TEMA DO
+ * DOCUMENTO, aplicadas como variáveis em linha por `useBoardTheme` — aqui
+ * ficam só as regras que dependem do modo (barras de rolagem) e a fonte.
+ * Todo valor que chega aqui já passou por `#rrggbb` ou por uma lista fechada.
  */
-[data-board='light'] {
-  --canvas: #f6f7f9;
-  --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --ink: #1b2230;
-  --muted: #667085;
-  --line: #e3e6eb;
-  --grid: #d5d9e0;
-  --filament: #f2b705;
-  --filament-soft: rgb(242 183 5 / 0.28);
-  --filament-ink: #7a5800;
-  --danger: #c2372b;
-  --ok: #2f8a4c;
-  color-scheme: light;
+[data-board] {
   background: var(--canvas);
 }
 
+/*
+ * A fonte escolhida vale para o CONTEÚDO (blocos e rótulos de conector), não
+ * para a interface: a barra do bloco, os painéis e os diálogos continuam na
+ * fonte do sistema, mesmo com o documento em manuscrita.
+ */
+[data-board] .react-flow__node,
+[data-board] .board-text {
+  font-family: var(--board-font, var(--font-sans));
+}
+
+[data-board='light'] {
+  color-scheme: light;
+}
+
 [data-board='dark'] {
-  --canvas: #12151b;
-  --surface: #1a1f28;
-  --surface-2: #222835;
-  --ink: #e8ebf0;
-  --muted: #97a0af;
-  --line: #2c3340;
-  --grid: #262c37;
-  --filament: #ffc82e;
-  --filament-soft: rgb(255 200 46 / 0.22);
-  --filament-ink: #ffd766;
-  --danger: #ff6b5e;
-  --ok: #5ccf83;
   color-scheme: dark;
-  background: var(--canvas);
 }
 
 @theme {
@@ -131,6 +124,61 @@ body {
 .drop-target {
   outline: 3px dashed var(--filament);
   outline-offset: 4px;
+}
+
+/* Modo religar (SPEC-007 §5.2): o que não pode receber o bloco fica apagado. */
+.rewire-blocked {
+  opacity: 0.32;
+  filter: grayscale(0.7);
+}
+
+.rewire-target {
+  cursor: pointer;
+}
+
+.rewire-target:hover {
+  outline: 2px solid var(--filament);
+  outline-offset: 4px;
+}
+
+/* Ligação selecionada, à espera do "Cortar e religar". */
+.mind-edge-selected {
+  stroke-dasharray: 5 4;
+  paint-order: stroke;
+}
+
+/* Barra de matiz do seletor de cor (SPEC-007 §5.6). */
+.hue-slider {
+  background: linear-gradient(
+    to right,
+    #ff0000,
+    #ffff00,
+    #00ff00,
+    #00ffff,
+    #0000ff,
+    #ff00ff,
+    #ff0000
+  );
+  border: 1px solid var(--line);
+}
+
+.hue-slider::-webkit-slider-thumb {
+  appearance: none;
+  height: 16px;
+  width: 16px;
+  border-radius: 9999px;
+  background: var(--surface);
+  border: 2px solid var(--ink);
+  cursor: pointer;
+}
+
+.hue-slider::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  background: var(--surface);
+  border: 2px solid var(--ink);
+  cursor: pointer;
 }
 
 .react-flow {

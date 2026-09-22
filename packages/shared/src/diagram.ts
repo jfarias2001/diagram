@@ -62,6 +62,8 @@ export const shapeSchema = z.object({
   text: z.string().max(SHAPE_TEXT_MAX),
   fill: color.optional(),
   stroke: color.optional(),
+  /** Cor do texto escolhida à mão (SPEC-007 §2.2). Ausente = cor sugerida. */
+  ink: color.optional(),
   bold: z.boolean().optional(),
   z: z.number().finite(),
 });
@@ -135,6 +137,8 @@ function readShape(id: string, y: YEl): Shape | null {
   if (typeof fill === 'string' && HEX.test(fill)) shape.fill = fill;
   const stroke = y.get('stroke');
   if (typeof stroke === 'string' && HEX.test(stroke)) shape.stroke = stroke;
+  const ink = y.get('ink');
+  if (typeof ink === 'string' && HEX.test(ink)) shape.ink = ink;
   if (y.get('bold') === true) shape.bold = true;
   return shape;
 }
@@ -200,6 +204,7 @@ function writeShape(map: Y.Map<YEl>, shape: Shape) {
   y.set('z', shape.z);
   if (shape.fill && HEX.test(shape.fill)) y.set('fill', shape.fill);
   if (shape.stroke && HEX.test(shape.stroke)) y.set('stroke', shape.stroke);
+  if (shape.ink && HEX.test(shape.ink)) y.set('ink', shape.ink);
   if (shape.bold) y.set('bold', true);
   map.set(shape.id, y);
 }
@@ -252,9 +257,9 @@ export function addShape(doc: Y.Doc, input: AddShapeInput, origin?: unknown): bo
   return true;
 }
 
-export type ShapePatch = Partial<Pick<Shape, 'text' | 'fill' | 'stroke' | 'bold'>>;
+export type ShapePatch = Partial<Pick<Shape, 'text' | 'fill' | 'stroke' | 'ink' | 'bold'>>;
 
-/** `fill: ''` / `stroke: ''` voltam ao padrão. Cores que não são hex são ignoradas. */
+/** `fill: ''`, `stroke: ''` e `ink: ''` voltam ao padrão. Cores que não são hex são ignoradas. */
 export function updateShapes(doc: Y.Doc, ids: string[], patch: ShapePatch, origin?: unknown): boolean {
   const map = shapesMap(doc);
   const targets = ids.map((id) => map.get(id)).filter((y): y is YEl => y instanceof Y.Map);
@@ -262,7 +267,7 @@ export function updateShapes(doc: Y.Doc, ids: string[], patch: ShapePatch, origi
   doc.transact(() => {
     for (const y of targets) {
       if (patch.text !== undefined) y.set('text', patch.text.slice(0, SHAPE_TEXT_MAX));
-      for (const key of ['fill', 'stroke'] as const) {
+      for (const key of ['fill', 'stroke', 'ink'] as const) {
         const value = patch[key];
         if (value === undefined) continue;
         if (value === '') y.delete(key);

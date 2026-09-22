@@ -1,15 +1,19 @@
-import { type MindMapNode, NODE_SHAPES, type NodeShape, normalizeLink } from '@diagram/shared';
-import { NodeToolbar, Position } from '@xyflow/react';
+import { type MindMapNode, NODE_SHAPES, type NodeShape, normalizeLink, readableInk } from '@diagram/shared';
+import { NodeToolbar, Position, useStore } from '@xyflow/react';
 import { type ReactNode, useState } from 'react';
+import { ColorPicker } from '../../components/ColorPicker';
 import {
   IconArrowDown,
   IconArrowUp,
+  IconBranch,
   IconChild,
   IconCollapse,
   IconExpand,
   IconExternal,
+  IconInk,
   IconLink,
   IconNote,
+  IconScissors,
   IconShape,
   IconSibling,
   IconTidy,
@@ -17,20 +21,6 @@ import {
 } from './icons';
 
 // Barra flutuante do nó selecionado (SPEC-002 §5.1). Uma só para o mapa inteiro.
-
-export const BRANCH_COLORS = ['#e8590c', '#1c7ed6', '#2f9e44', '#ae3ec9', '#f08c00', '#0c8599', '#d6336c', '#5c7cfa'];
-
-/** Preenchimentos do bloco (SPEC-006 §5.4): claros para quadro claro, escuros para quadro escuro. */
-export const FILL_COLORS = [
-  '#ffffff',
-  '#fff3bf',
-  '#ffe3e3',
-  '#d3f9d8',
-  '#d0ebff',
-  '#f3d9fa',
-  '#495057',
-  '#1b2230',
-];
 
 const SHAPE_LABEL: Record<NodeShape, string> = {
   rounded: 'Arredondado',
@@ -48,8 +38,10 @@ export interface NodeActions {
   toggleCollapse: (id: string) => void;
   toggleBold: (id: string) => void;
   setColor: (id: string, color: string) => void;
-  /** Preenchimento do bloco; `''` volta ao fundo do quadro (SPEC-006 §5.4). */
+  /** Preenchimento do bloco; `''` volta ao fundo do tema (SPEC-007 §5.6). */
   setFill: (id: string, fill: string) => void;
+  /** Cor do texto; `''` volta à cor sugerida (SPEC-007 §5.6). */
+  setInk: (id: string, ink: string) => void;
   setShape: (id: string, shape: NodeShape | '') => void;
   /** Troca a ordem com o irmão de cima/de baixo (SPEC-006 §5.2). */
   reorder: (id: string, direction: 'up' | 'down') => void;
@@ -58,6 +50,11 @@ export interface NodeActions {
   /** Retorna false se o link foi recusado. */
   setLink: (id: string, link: string) => boolean;
   openNote: (id: string) => void;
+  /** Corta a ligação com o pai e entra no modo religar (SPEC-007 §5.2). */
+  cutEdge: (id: string) => void;
+  /** Liga/desliga "arrastar leva o ramo junto" (SPEC-007 §5.1). */
+  toggleBranchDrag: () => void;
+  branchDrag: boolean;
   /** Devolve o foco ao mapa, para os atalhos continuarem valendo. */
   focusCanvas: () => void;
 }
@@ -65,6 +62,10 @@ export interface NodeActions {
 interface Props {
   node: MindMapNode;
   canEdit: boolean;
+  /** Cores do tema do documento, oferecidas no seletor. */
+  palette: readonly string[];
+  /** Formato padrão do tema, quando o bloco não escolheu um. */
+  defaultShape: NodeShape;
   hasChildren: boolean;
   /** Quantos irmãos há (com o próprio): com 1, não há o que reordenar. */
   siblingCount: number;
@@ -75,9 +76,29 @@ interface Props {
 
 type Popover = 'color' | 'link' | 'shape' | null;
 
-export function NodeActionBar({ node, canEdit, hasChildren, siblingCount, branchMoved, actions }: Props) {
+export function NodeActionBar({
+  node,
+  canEdit,
+  palette,
+  defaultShape,
+  hasChildren,
+  siblingCount,
+  branchMoved,
+  actions,
+}: Props) {
   const [popover, setPopover] = useState<Popover>(null);
   const isRoot = node.parentId === null;
+  // Sem espaço acima do bloco, a barra desce: senão ela (e o seletor aberto)
+  // ficariam escondidos atrás do cabeçalho do editor.
+  const needed = popover ? 340 : 110;
+  const place = useStore((state) => {
+    const item = state.nodeLookup.get(node.id);
+    if (!item) return Position.Top;
+    const top = item.internals.positionAbsolute.y * state.transform[2] + state.transform[1];
+    return top < needed ? Position.Bottom : Position.Top;
+  });
+  // O seletor abre sempre do lado oposto ao bloco, para não cobrir o que se pinta.
+  const popoverSide = place === Position.Bottom ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]';
   const toggle = (p: Exclude<Popover, null>) => setPopover((cur) => (cur === p ? null : p));
   const run = (fn: (id: string) => void) => () => {
     fn(node.id);
@@ -88,9 +109,11 @@ export function NodeActionBar({ node, canEdit, hasChildren, siblingCount, branch
   if (!canEdit && !node.note && !node.link) return null;
 
   return (
-    <NodeToolbar nodeId={node.id} isVisible position={Position.Top} offset={12}>
+    <NodeToolbar nodeId={node.id} isVisible position={place} offset={12}>
+      {/* O popover sai do fluxo: a barra fica sempre à mesma distância do bloco,
+          por mais alto que o seletor de cor seja (senão ela some atrás do cabeçalho). */}
       <div
-        className="export-hidden flex flex-col items-center gap-1.5"
+        className="export-hidden relative flex flex-col items-center"
         onKeyDown={(e) => {
           // Atalhos do mapa não disparam de dentro da barra (CLAUDE.md §7).
           e.stopPropagation();
@@ -103,18 +126,16 @@ export function NodeActionBar({ node, canEdit, hasChildren, siblingCount, branch
         <div
           role="toolbar"
           aria-label="Ações do tópico"
-          className="flex items-center gap-0.5 rounded-xl border border-line bg-surface p-1 shadow-md"
+          className="flex items-center gap-0.5 rounded-xl border border-line bg-surface p-1 shadow-lg"
         >
           {canEdit && (
             <>
               <BarButton label="Adicionar filho" shortcut="Tab" onClick={() => actions.createChild(node.id)}>
                 <IconChild />
-                <span className="text-xs font-medium">Filho</span>
               </BarButton>
               {!isRoot && (
                 <BarButton label="Adicionar irmão" shortcut="Enter" onClick={() => actions.createSibling(node.id)}>
                   <IconSibling />
-                  <span className="text-xs font-medium">Irmão</span>
                 </BarButton>
               )}
               <Divider />
@@ -122,8 +143,7 @@ export function NodeActionBar({ node, canEdit, hasChildren, siblingCount, branch
                 <span
                   className="h-4 w-4 rounded-full border border-line"
                   style={{
-                    background:
-                      node.fill ?? node.color ?? 'conic-gradient(#e8590c, #1c7ed6, #2f9e44, #ae3ec9, #e8590c)',
+                    background: node.fill ?? node.color ?? `conic-gradient(${palette.slice(0, 4).join(',')},${palette[0]})`,
                     borderColor: node.color,
                   }}
                 />
@@ -135,6 +155,23 @@ export function NodeActionBar({ node, canEdit, hasChildren, siblingCount, branch
                 <span className="w-4 text-sm font-bold">B</span>
               </BarButton>
             </>
+          )}
+          {canEdit && !isRoot && (
+            <BarButton label="Cortar e religar em outro tópico-pai" shortcut="Ctrl+X" onClick={run(actions.cutEdge)}>
+              <IconScissors />
+            </BarButton>
+          )}
+          {canEdit && hasChildren && (
+            <BarButton
+              label={actions.branchDrag ? 'Arrastar move só este bloco' : 'Arrastar leva o ramo junto (ou segure Shift)'}
+              pressed={actions.branchDrag}
+              onClick={() => {
+                actions.toggleBranchDrag();
+                actions.focusCanvas();
+              }}
+            >
+              <IconBranch />
+            </BarButton>
           )}
           {canEdit && !isRoot && siblingCount > 1 && (
             <>
@@ -168,10 +205,9 @@ export function NodeActionBar({ node, canEdit, hasChildren, siblingCount, branch
                 rel="noopener noreferrer"
                 title={node.link}
                 aria-label={`Abrir link: ${node.link}`}
-                className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-muted hover:bg-surface-2 hover:text-ink"
+                className="flex h-8 items-center justify-center rounded-lg px-2 text-muted hover:bg-surface-2 hover:text-ink"
               >
                 <IconExternal />
-                <span className="text-xs font-medium">Abrir link</span>
               </a>
             )
           )}
@@ -194,33 +230,41 @@ export function NodeActionBar({ node, canEdit, hasChildren, siblingCount, branch
           )}
         </div>
 
-        {popover === 'color' && canEdit && (
-          <ColorPicker
-            node={node}
-            onPickOutline={(color) => actions.setColor(node.id, color)}
-            onPickFill={(fill) => actions.setFill(node.id, fill)}
-          />
-        )}
-        {popover === 'shape' && canEdit && (
-          <ShapePicker
-            current={node.shape ?? 'rounded'}
-            onPick={(shape) => {
-              actions.setShape(node.id, shape);
-              setPopover(null);
-              actions.focusCanvas();
-            }}
-          />
-        )}
-        {popover === 'link' && canEdit && (
-          <LinkEditor
-            key={node.id}
-            current={node.link ?? ''}
-            onSave={(link) => actions.setLink(node.id, link)}
-            onClose={() => {
-              setPopover(null);
-              actions.focusCanvas();
-            }}
-          />
+        {popover && canEdit && (
+          <div className={`absolute left-1/2 z-10 -translate-x-1/2 ${popoverSide}`}>
+            {popover === 'color' && (
+              <NodeColors
+                node={node}
+                palette={palette}
+                onPick={{
+                  color: (value) => actions.setColor(node.id, value),
+                  fill: (value) => actions.setFill(node.id, value),
+                  ink: (value) => actions.setInk(node.id, value),
+                }}
+              />
+            )}
+            {popover === 'shape' && (
+              <ShapePicker
+                current={node.shape ?? defaultShape}
+                onPick={(shape) => {
+                  actions.setShape(node.id, shape);
+                  setPopover(null);
+                  actions.focusCanvas();
+                }}
+              />
+            )}
+            {popover === 'link' && (
+              <LinkEditor
+                key={node.id}
+                current={node.link ?? ''}
+                onSave={(link) => actions.setLink(node.id, link)}
+                onClose={() => {
+                  setPopover(null);
+                  actions.focusCanvas();
+                }}
+              />
+            )}
+          </div>
         )}
       </div>
     </NodeToolbar>
@@ -265,71 +309,63 @@ function Divider() {
   return <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />;
 }
 
-/** Contorno (cor do ramo) e preenchimento do bloco, no mesmo popover (SPEC-006 §5.4). */
-function ColorPicker({
-  node,
-  onPickOutline,
-  onPickFill,
-}: {
-  node: MindMapNode;
-  onPickOutline: (color: string) => void;
-  onPickFill: (fill: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-2 shadow-md">
-      <Swatches
-        label="Contorno"
-        colors={BRANCH_COLORS}
-        current={node.color}
-        autoTitle="Voltar à cor do ramo"
-        onPick={onPickOutline}
-      />
-      <Swatches
-        label="Preenchimento"
-        colors={FILL_COLORS}
-        current={node.fill}
-        autoTitle="Voltar ao fundo do quadro"
-        onPick={onPickFill}
-      />
-    </div>
-  );
-}
+type ColorTarget = 'color' | 'fill' | 'ink';
 
-function Swatches({
-  label,
-  colors,
-  current,
-  autoTitle,
+const TARGET_LABEL: Record<ColorTarget, string> = {
+  color: 'Contorno',
+  fill: 'Preenchimento',
+  ink: 'Texto',
+};
+
+/**
+ * Contorno, preenchimento e cor do texto, cada um com o seletor livre
+ * (SPEC-007 §5.6). O aviso de legibilidade compara o texto com o preenchimento
+ * em uso — avisa, não impede (PRD §5.18).
+ */
+function NodeColors({
+  node,
+  palette,
   onPick,
 }: {
-  label: string;
-  colors: string[];
-  current: string | undefined;
-  autoTitle: string;
-  onPick: (color: string) => void;
+  node: MindMapNode;
+  palette: readonly string[];
+  onPick: Record<ColorTarget, (value: string) => void>;
 }) {
+  const [target, setTarget] = useState<ColorTarget>('fill');
+  const current = node[target];
+  const inkBackground = node.fill ?? null;
+
   return (
-    <div className="flex items-center gap-1.5" role="group" aria-label={label}>
-      <span className="w-24 text-xs text-muted">{label}</span>
-      {colors.map((color) => (
-        <button
-          key={color}
-          type="button"
-          aria-label={`${label} ${color}`}
-          aria-pressed={current === color}
-          onClick={() => onPick(color)}
-          className={`h-5 w-5 rounded-full border border-line transition ${current === color ? 'ring-2 ring-ink ring-offset-2 ring-offset-surface' : 'hover:scale-110'}`}
-          style={{ background: color }}
-        />
-      ))}
-      <button
-        type="button"
-        onClick={() => onPick('')}
-        className="rounded-md px-1.5 text-xs text-muted hover:bg-surface-2 hover:text-ink"
-        title={autoTitle}
-      >
-        Auto
-      </button>
+    <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-2.5 shadow-lg">
+      <div role="tablist" aria-label="O que pintar" className="flex items-center gap-0.5 rounded-lg bg-surface-2 p-0.5">
+        {(['color', 'fill', 'ink'] as const).map((key) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={target === key}
+            onClick={() => setTarget(key)}
+            className={`flex h-7 flex-1 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium transition ${
+              target === key ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'
+            }`}
+          >
+            {key === 'ink' && <IconInk size={12} />}
+            {TARGET_LABEL[key]}
+          </button>
+        ))}
+      </div>
+      <ColorPicker
+        key={target}
+        label={TARGET_LABEL[target]}
+        value={current}
+        palette={target === 'ink' && inkBackground ? [readableInk(inkBackground), ...palette] : palette}
+        onChange={onPick[target]}
+        onAuto={() => onPick[target]('')}
+        autoLabel={
+          target === 'color' ? 'Voltar à cor do ramo' : target === 'fill' ? 'Voltar ao fundo do tema' : 'Voltar à cor sugerida'
+        }
+        contrastWith={target === 'ink' ? inkBackground : null}
+      />
     </div>
   );
 }
@@ -337,7 +373,7 @@ function Swatches({
 /** Miniatura de cada formato (SPEC-006 §5.4). */
 function ShapePicker({ current, onPick }: { current: NodeShape; onPick: (shape: NodeShape) => void }) {
   return (
-    <div className="flex items-center gap-1 rounded-xl border border-line bg-surface p-1.5 shadow-md" role="group" aria-label="Formato do bloco">
+    <div className="flex items-center gap-1 rounded-xl border border-line bg-surface p-1.5 shadow-lg" role="group" aria-label="Formato do bloco">
       {NODE_SHAPES.map((shape) => (
         <button
           key={shape}
@@ -395,7 +431,7 @@ function LinkEditor({
 
   return (
     <form
-      className="flex w-80 flex-col gap-2 rounded-xl border border-line bg-surface p-2 shadow-md"
+      className="flex w-80 flex-col gap-2 rounded-xl border border-line bg-surface p-2 shadow-lg"
       onSubmit={(e) => {
         e.preventDefault();
         save();

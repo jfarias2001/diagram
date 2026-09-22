@@ -1,6 +1,8 @@
 import { type Browser, expect, type Page, test } from '@playwright/test';
 
-// SPEC-006 §7 — posição livre, formato e cor do bloco, e tema do quadro.
+// SPEC-006 §7 — posição livre, formato e cor do bloco.
+// O tema do quadro saiu daqui: virou tema do DOCUMENTO na SPEC-007, coberto
+// por sp007-aparencia.spec.ts.
 
 const SHOTS = process.env.E2E_SHOTS;
 const shot = async (page: Page, name: string) => {
@@ -49,7 +51,7 @@ async function boxOf(page: Page, text: string) {
   return box;
 }
 
-test('mapa: arrastar posiciona, organizar volta, formato e cor do bloco, tema do quadro', async ({ browser }) => {
+test('mapa: arrastar posiciona, organizar volta, formato e cor do bloco', async ({ browser }) => {
   const admin = await newPage(browser);
   await loginAdmin(admin);
 
@@ -71,13 +73,16 @@ test('mapa: arrastar posiciona, organizar volta, formato e cor do bloco, tema do
   await admin.keyboard.press('Enter');
   await expect(node(admin, 'Compras')).toBeVisible();
 
-  // 1) Arrastar "Processos" para o vazio: ele e o filho ficam onde foram soltos.
+  // 1) Arrastar "Processos" para o vazio com Shift: o ramo inteiro acompanha
+  // (a partir da SPEC-007, o arrasto simples move só o bloco).
   const before = await boxOf(admin, 'Processos');
   const childBefore = await boxOf(admin, 'Compras');
+  await admin.keyboard.down('Shift');
   await admin.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
   await admin.mouse.down();
   await admin.mouse.move(before.x + before.width / 2, before.y + 220, { steps: 12 });
   await admin.mouse.up();
+  await admin.keyboard.up('Shift');
   await expect(admin.getByText('Salvo')).toBeVisible();
 
   const after = await boxOf(admin, 'Processos');
@@ -94,7 +99,8 @@ test('mapa: arrastar posiciona, organizar volta, formato e cor do bloco, tema do
   await admin.getByRole('button', { name: 'Elipse' }).click();
   await node(admin, 'Processos').click();
   await admin.getByRole('button', { name: 'Cores' }).click();
-  await admin.getByRole('button', { name: 'Preenchimento #1b2230' }).click();
+  await admin.getByLabel('Preenchimento: código hexadecimal').fill('#1b2230');
+  await admin.getByLabel('Preenchimento: código hexadecimal').press('Enter');
   await expect(admin.getByText('Salvo')).toBeVisible();
   // Texto claro sobre o preenchimento escuro (contraste, PRD-006 §5.13).
   // A cor fica no bloco em si, dentro do invólucro do React Flow.
@@ -118,21 +124,4 @@ test('mapa: arrastar posiciona, organizar volta, formato e cor do bloco, tema do
   await expect(admin.getByText('Salvo')).toBeVisible();
   expect((await boxOf(admin, 'Processos')).y).toBeGreaterThan(before.y + 120);
 
-  // 4) Tema do quadro: só o quadro muda, e a escolha sobrevive ao recarregar.
-  const boardBg = () =>
-    admin.locator('[data-board]').first().evaluate((el) => getComputedStyle(el).backgroundColor);
-  const headerBg = () => admin.locator('header').first().evaluate((el) => getComputedStyle(el).backgroundColor);
-
-  const lightBoard = await boardBg();
-  const headerBefore = await headerBg();
-  await admin.getByRole('button', { name: /Mudar o quadro para o modo/ }).click();
-  const darkBoard = await boardBg();
-  expect(darkBoard).not.toBe(lightBoard);
-  // O cabeçalho (resto da interface) não mudou.
-  expect(await headerBg()).toBe(headerBefore);
-  await shot(admin, 'sp006-tema');
-
-  await admin.reload();
-  await expect(admin.getByText('Salvo')).toBeVisible();
-  expect(await boardBg()).toBe(darkBoard);
 });

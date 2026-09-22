@@ -11,6 +11,7 @@ import { useCheckpoint } from '../history/checkpoint';
 import { HistoryPanel } from '../history/HistoryPanel';
 import { useVersionPreview } from '../history/useVersionPreview';
 import { VersionBanner } from '../history/VersionBanner';
+import { AppearancePanel } from './AppearancePanel';
 import { useBoardTheme } from './boardTheme';
 import { EditorHeader } from './EditorHeader';
 import { MindMapCanvas } from './MindMapCanvas';
@@ -90,7 +91,8 @@ function Editor({
   const openNote = useCallback(() => setNoteOpen(true), []);
   const noteNodeId = useRef<string | null>(null);
 
-  const board = useBoardTheme();
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const board = useBoardTheme(doc, canEdit);
   const selected = selectedId ? nodes[selectedId] : undefined;
 
   // Modo versão (SPEC-005 §5.2): o quadro passa a vir de um Y.Doc local.
@@ -98,6 +100,8 @@ function Editor({
   const [viewing, setViewing] = useState<VersionSummary | null>(null);
   const { preview, error: previewError } = useVersionPreview(meta.id, viewing);
   const previewNodes = useMindMapNodes(preview?.doc ?? EMPTY_DOC, false);
+  // A versão guarda o próprio tema: olhar uma versão antiga mostra como ela era.
+  const previewBoard = useBoardTheme(preview?.doc ?? EMPTY_DOC, false);
   const checkpoint = useCheckpoint(meta.id, canEdit);
 
   // Tópico apagado (por alguém) com a nota aberta: fecha o painel (SPEC-002 §5.5).
@@ -114,7 +118,8 @@ function Editor({
         meta={meta}
         state={state}
         provider={provider}
-        board={board}
+        appearanceOpen={appearanceOpen}
+        onToggleAppearance={() => setAppearanceOpen((open) => !open)}
         historyOpen={historyOpen}
         onToggleHistory={() => setHistoryOpen((open) => !open)}
       />
@@ -129,8 +134,12 @@ function Editor({
       )}
       <ErrorText error={previewError} />
 
-      {/* O tema vale só daqui para dentro (SPEC-006 §5.5). */}
-      <div className="relative flex-1" data-board={board.theme}>
+      {/* O tema do documento vale só daqui para dentro (SPEC-007 §5.4). */}
+      <div
+        className="relative flex-1"
+        data-board={(inPreview ? previewBoard : board).theme.mode}
+        style={(inPreview ? previewBoard : board).vars}
+      >
         {inPreview ? (
           preview ? (
             // Chave por versão: o canvas recomeça limpo a cada versão aberta.
@@ -144,6 +153,7 @@ function Editor({
               selectedId={null}
               onSelect={NOOP}
               onOpenNote={NOOP}
+              board={previewBoard}
             />
           ) : (
             <div className="flex h-full items-center justify-center text-muted">
@@ -161,11 +171,15 @@ function Editor({
             onSelect={setSelectedId}
             onOpenNote={openNote}
             onCheckpoint={checkpoint}
+            board={board}
           />
         )}
         <ShortcutHint rows={canEdit && !inPreview ? MIND_SHORTCUTS : [['Setas', 'navegar']]} />
         {noteOpen && !inPreview && (
           <NotePanel doc={doc} node={selected} canEdit={canEdit} onClose={() => setNoteOpen(false)} />
+        )}
+        {appearanceOpen && !inPreview && (
+          <AppearancePanel doc={doc} board={board} canEdit={canEdit} onClose={() => setAppearanceOpen(false)} />
         )}
         {historyOpen && (
           <HistoryPanel
@@ -194,6 +208,8 @@ const MIND_SHORTCUTS: Array<[string, string]> = [
   ['Setas', 'navegar'],
   ['Ctrl+Z / Ctrl+Y', 'desfazer/refazer'],
   ['Ctrl+B', 'negrito'],
-  ['Arrastar', 'posicionar (ou soltar sobre outro bloco para trocar de pai)'],
+  ['Arrastar', 'move só este bloco (Shift leva o ramo)'],
+  ['Soltar sobre outro bloco', 'trocar de pai'],
+  ['Ctrl+X, depois clicar', 'cortar a ligação e religar'],
   ['Ctrl+↑ / Ctrl+↓', 'mover entre irmãos'],
 ];

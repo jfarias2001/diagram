@@ -1,8 +1,8 @@
 import type { EdgeArrow, EdgeLine, FlowEdgeRecord, Shape } from '@diagram/shared';
 import { NodeToolbar, Position } from '@xyflow/react';
 import { type ReactNode, useState } from 'react';
-import { IconTrash } from '../editor/icons';
-import { DEFAULT_STROKE, FILL_COLORS, STROKE_COLORS } from './shapes';
+import { ColorPicker } from '../../components/ColorPicker';
+import { IconInk, IconTrash } from '../editor/icons';
 
 // Barra de estilo da seleção (SPEC-003 §5.2). Para formas, acompanha a seleção
 // no quadro; para um conector, fica no topo.
@@ -10,18 +10,26 @@ import { DEFAULT_STROKE, FILL_COLORS, STROKE_COLORS } from './shapes';
 export interface ShapeStyleActions {
   setFill: (color: string) => void;
   setStroke: (color: string) => void;
+  /** Cor do texto (SPEC-007 §5.6). */
+  setInk: (color: string) => void;
   toggleBold: () => void;
   remove: () => void;
 }
 
 export function ShapeSelectionBar({
   shapes,
+  palette,
+  defaults,
   actions,
 }: {
   shapes: Shape[];
+  /** Cores do tema do documento. */
+  palette: readonly string[];
+  /** Cores em uso quando a forma não escolheu nenhuma. */
+  defaults: { fill: string; stroke: string; ink: string };
   actions: ShapeStyleActions;
 }) {
-  const [popover, setPopover] = useState<'fill' | 'stroke' | null>(null);
+  const [popover, setPopover] = useState<'fill' | 'stroke' | 'ink' | null>(null);
   const first = shapes[0];
   if (!first) return null;
   const allBold = shapes.every((s) => s.bold);
@@ -35,10 +43,13 @@ export function ShapeSelectionBar({
           className="flex items-center gap-0.5 rounded-xl border border-line bg-surface p-1 shadow-md"
         >
           <BarButton label="Cor de fundo" pressed={popover === 'fill'} onClick={() => setPopover((p) => (p === 'fill' ? null : 'fill'))}>
-            <span className="h-4 w-4 rounded border border-line" style={{ background: first.fill ?? '#ffffff' }} />
+            <span className="h-4 w-4 rounded border border-line" style={{ background: first.fill ?? defaults.fill }} />
           </BarButton>
           <BarButton label="Cor da borda" pressed={popover === 'stroke'} onClick={() => setPopover((p) => (p === 'stroke' ? null : 'stroke'))}>
-            <span className="h-4 w-4 rounded-full border-[3px]" style={{ borderColor: first.stroke ?? DEFAULT_STROKE }} />
+            <span className="h-4 w-4 rounded-full border-[3px]" style={{ borderColor: first.stroke ?? defaults.stroke }} />
+          </BarButton>
+          <BarButton label="Cor do texto" pressed={popover === 'ink'} onClick={() => setPopover((p) => (p === 'ink' ? null : 'ink'))}>
+            <IconInk />
           </BarButton>
           <BarButton label="Negrito" shortcut="Ctrl+B" pressed={allBold} onClick={actions.toggleBold}>
             <span className="w-4 text-sm font-bold">B</span>
@@ -49,16 +60,26 @@ export function ShapeSelectionBar({
           </BarButton>
         </div>
         {popover && (
-          <ColorRow
-            colors={popover === 'fill' ? FILL_COLORS : STROKE_COLORS}
-            current={popover === 'fill' ? first.fill : first.stroke}
-            label={popover === 'fill' ? 'Cores de fundo' : 'Cores da borda'}
-            onPick={(color) => {
-              if (popover === 'fill') actions.setFill(color);
-              else actions.setStroke(color);
-              setPopover(null);
-            }}
-          />
+          <div className="rounded-xl border border-line bg-surface p-2.5 shadow-lg">
+            <ColorPicker
+              key={popover}
+              label={popover === 'fill' ? 'Cor de fundo' : popover === 'stroke' ? 'Cor da borda' : 'Cor do texto'}
+              value={popover === 'fill' ? first.fill : popover === 'stroke' ? first.stroke : first.ink}
+              palette={palette}
+              contrastWith={popover === 'ink' ? (first.fill ?? defaults.fill) : null}
+              onChange={(color) => {
+                if (popover === 'fill') actions.setFill(color);
+                else if (popover === 'stroke') actions.setStroke(color);
+                else actions.setInk(color);
+              }}
+              onAuto={() => {
+                if (popover === 'fill') actions.setFill('');
+                else if (popover === 'stroke') actions.setStroke('');
+                else actions.setInk('');
+              }}
+              autoLabel="Voltar à cor do tema"
+            />
+          </div>
         )}
       </div>
     </NodeToolbar>
@@ -86,7 +107,17 @@ const ARROWS: Array<{ value: EdgeArrow; label: string }> = [
   { value: 'none', label: 'Sem seta' },
 ];
 
-export function EdgeSelectionBar({ edge, actions }: { edge: FlowEdgeRecord; actions: EdgeStyleActions }) {
+export function EdgeSelectionBar({
+  edge,
+  palette,
+  defaultColor,
+  actions,
+}: {
+  edge: FlowEdgeRecord;
+  palette: readonly string[];
+  defaultColor: string;
+  actions: EdgeStyleActions;
+}) {
   const [colors, setColors] = useState(false);
   return (
     <div className="export-hidden absolute top-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-1.5">
@@ -110,7 +141,7 @@ export function EdgeSelectionBar({ edge, actions }: { edge: FlowEdgeRecord; acti
           </BarButton>
         ))}
         <BarButton label="Cor do conector" pressed={colors} onClick={() => setColors((c) => !c)}>
-          <span className="h-4 w-4 rounded-full border-[3px]" style={{ borderColor: edge.color ?? DEFAULT_STROKE }} />
+          <span className="h-4 w-4 rounded-full border-[3px]" style={{ borderColor: edge.color ?? defaultColor }} />
         </BarButton>
         <BarButton label="Texto do conector" onClick={actions.editLabel}>
           <span className="text-xs font-medium">Aa</span>
@@ -121,46 +152,17 @@ export function EdgeSelectionBar({ edge, actions }: { edge: FlowEdgeRecord; acti
         </BarButton>
       </div>
       {colors && (
-        <ColorRow
-          colors={STROKE_COLORS}
-          current={edge.color}
-          label="Cores do conector"
-          onPick={(color) => {
-            actions.setColor(color);
-            setColors(false);
-          }}
-        />
+        <div className="rounded-xl border border-line bg-surface p-2.5 shadow-lg">
+          <ColorPicker
+            label="Cor do conector"
+            value={edge.color}
+            palette={palette}
+            onChange={actions.setColor}
+            onAuto={() => actions.setColor('')}
+            autoLabel="Voltar à cor do tema"
+          />
+        </div>
       )}
-    </div>
-  );
-}
-
-function ColorRow({
-  colors,
-  current,
-  label,
-  onPick,
-}: {
-  colors: string[];
-  current: string | undefined;
-  label: string;
-  onPick: (color: string) => void;
-}) {
-  return (
-    <div role="group" aria-label={label} className="flex items-center gap-1.5 rounded-xl border border-line bg-surface p-1.5 shadow-md">
-      {colors.map((color) => (
-        <button
-          key={color}
-          type="button"
-          aria-label={`Cor ${color}`}
-          aria-pressed={current === color}
-          onClick={() => onPick(color)}
-          className={`h-5 w-5 rounded-full border border-line transition ${
-            current === color ? 'ring-2 ring-ink ring-offset-2 ring-offset-surface' : 'hover:scale-110'
-          }`}
-          style={{ background: color }}
-        />
-      ))}
     </div>
   );
 }

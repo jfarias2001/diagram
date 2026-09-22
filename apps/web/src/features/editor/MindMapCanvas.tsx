@@ -7,35 +7,38 @@ import {
   findRoot,
   isInBranch,
   type MindMapNode,
-  moveNode,
   moveSibling,
   type NodeRecord,
   readableInk,
-  setNodeOffset,
+  reparentNode,
+  setNodeOffsets,
   updateNode,
 } from '@diagram/shared';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import {
   Background,
   BackgroundVariant,
-  type Edge,
   type Node,
   type NodeChange,
+  Panel,
   ReactFlow,
   useReactFlow,
 } from '@xyflow/react';
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
+import type { BoardTheme } from './boardTheme';
 import { CanvasControls, FIT_VIEW_OPTIONS } from './CanvasControls';
-import { type PositionedNode, resolvePositions } from './layout';
+import { type MindEdgeData, MindEdge, type MindFlowEdge } from './MindEdge';
+import { offsetsForSoloMove, type PositionedNode, resolvePositions } from './layout';
 import { type MindFlowNode, MindNode, type MindNodeData, PENDING_ENTER } from './MindNode';
-import { BRANCH_COLORS, type NodeActions, NodeActionBar } from './NodeActionBar';
+import { type NodeActions, NodeActionBar } from './NodeActionBar';
 import { stableData } from './stableData';
+import { edgeWidthForDepth } from './taper';
 import { LOCAL_ORIGIN } from './useMindMap';
 
-const ROOT_COLOR = '#667085';
 const NO_PEERS: Array<{ name: string; color: string }> = [];
 const nodeTypes = { mind: MindNode };
+const edgeTypes = { mind: MindEdge };
 
 interface Props {
   doc: Y.Doc;
@@ -50,6 +53,8 @@ interface Props {
   onOpenNote: (id: string) => void;
   /** Guarda uma versão antes de uma operação grande (SPEC-005 §5.3). */
   onCheckpoint?: (name: string) => void;
+  /** Tema do documento (SPEC-007 §5.4). */
+  board: BoardTheme;
 }
 
 type PeerSelection = Map<string, Array<{ name: string; color: string }>>;
@@ -90,10 +95,19 @@ export function MindMapCanvas({
   onSelect,
   onOpenNote,
   onCheckpoint,
+  board,
 }: Props) {
+  const theme = board.theme;
   const [editing, setEditing] = useState<{ id: string; draft: string | null } | null>(null);
-  // Arrasto: posição local + bloco sob o ponteiro (soltar nele troca o pai).
-  const [drag, setDrag] = useState<{ id: string; x: number; y: number; target: string | null } | null>(null);
+  // Arrasto: posição local, bloco sob o ponteiro e se o ramo vai junto (§5.1).
+  const [drag, setDrag] = useState<{ id: string; x: number; y: number; target: string | null; branch: boolean } | null>(
+    null,
+  );
+  // "Mover com o ramo" fixo na barra, para quem não usa Shift (toque).
+  const [branchDrag, setBranchDrag] = useState(false);
+  // Ligação selecionada e bloco esperando um novo pai (SPEC-007 §5.2).
+  const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
+  const [rewire, setRewire] = useState<string | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef('');
   const takePending = useCallback(() => {
@@ -113,7 +127,8 @@ export function MindMapCanvas({
   useEffect(() => {
     if (selectedId && !nodes[selectedId]) onSelect(findRoot(nodes)?.id ?? null);
     if (editing && !nodes[editing.id]) setEditing(null);
-  }, [nodes, selectedId, editing, onSelect]);
+    if (rewire && !nodes[rewire]) setRewire(null);
+  }, [nodes, selectedId, editing, rewire, onSelect]);
 
   const focusCanvas = useCallback(() => wrapperRef.current?.focus({ preventScroll: true }), []);
 
@@ -127,35 +142,44 @@ export function MindMapCanvas({
   );
 
   const index = useMemo(() => childrenIndex(nodes), [nodes]);
-  // Layout automático + deslocamentos manuais (SPEC-006 §2.2).
-  const positions = useMemo(() => resolvePositions(nodes), [nodes]);
+  // Layout automático + deslocamentos manuais (SPEC-006 §2.2), com a folga da
+  // fonte em uso (SPEC-007 §5.4).
+  const positions = useMemo(
+    () => resolvePositions(nodes, board.font.widthFactor),
+    [nodes, board.font.widthFactor],
+  );
   const posById = useMemo(() => new Map(positions.map((p) => [p.id, p])), [positions]);
 
-  const colorOf = useMemo(() => {
-    const colors = new Map<string, string>();
+  /** Cor e profundidade de cada nó, a partir da paleta do tema. */
+  const painted = useMemo(() => {
+    const out = new Map<string, { color: string; depth: number }>();
     const root = findRoot(nodes);
-    if (!root) return colors;
-    colors.set(root.id, root.color ?? ROOT_COLOR);
+    if (!root) return out;
+    out.set(root.id, { color: root.color ?? theme.rootColor, depth: 0 });
     (index.get(root.id) ?? []).forEach((branch, i) => {
-      const inherited = branch.color ?? BRANCH_COLORS[i % BRANCH_COLORS.length] ?? ROOT_COLOR;
+      const inherited = branch.color ?? theme.branches[i % theme.branches.length] ?? theme.rootColor;
       // Cor explícita num nó vale para ele e seus descendentes. Sem recursão:
       // um ramo muito profundo não pode estourar a pilha.
-      const stack: Array<{ node: MindMapNode; color: string }> = [{ node: branch, color: inherited }];
+      const stack: Array<{ node: MindMapNode; color: string; depth: number }> = [
+        { node: branch, color: inherited, depth: 1 },
+      ];
       while (stack.length > 0) {
-        const { node, color } = stack.pop() as { node: MindMapNode; color: string };
+        const { node, color, depth } = stack.pop() as { node: MindMapNode; color: string; depth: number };
         const own = node.color ?? color;
-        colors.set(node.id, own);
-        for (const child of index.get(node.id) ?? []) stack.push({ node: child, color: own });
+        out.set(node.id, { color: own, depth });
+        for (const child of index.get(node.id) ?? []) stack.push({ node: child, color: own, depth: depth + 1 });
       }
     });
-    return colors;
-  }, [nodes, index]);
+    return out;
+  }, [nodes, index, theme]);
 
   // Callbacks estáveis para o data dos nós; leem as ações atuais pelo ref (SPEC-002 §5.4).
   const actionsRef = useRef<NodeActions | null>(null);
   const onAddChild = useCallback((id: string) => actionsRef.current?.createChild(id), []);
   const onOpenNoteStable = useCallback((id: string) => actionsRef.current?.openNote(id), []);
+  const onCutEdge = useCallback((childId: string) => actionsRef.current?.cutEdge(childId), []);
   const dataCache = useRef(new Map<string, MindNodeData>());
+  const edgeCache = useRef(new Map<string, MindEdgeData>());
   // Tamanho medido de cada nó. Sem ele, cada objeto de nó novo chega ao React Flow
   // "não medido" e o nó fica escondido até ser medido de novo — um clique nesse
   // intervalo atravessa o nó e todos os nós são re-medidos a cada mudança.
@@ -166,25 +190,37 @@ export function MindMapCanvas({
     }
   }, []);
 
-  // Durante o arrasto, o ramo inteiro acompanha o bloco — só na tela, sem
-  // escrever no Yjs (a gravação é ao soltar, SPEC-006 §4).
+  // Durante o arrasto, só o bloco arrastado se move (SPEC-007 §5.1) — com
+  // Shift (ou "Mover com o ramo" ligado), o ramo inteiro acompanha.
   const dragId = drag?.id ?? null;
-  const dragBranch = useMemo(() => (dragId ? new Set(branchIds(nodes, dragId)) : null), [dragId, nodes]);
+  const dragBranch = useMemo(
+    () => (dragId && drag?.branch ? new Set(branchIds(nodes, dragId)) : null),
+    [dragId, drag?.branch, nodes],
+  );
   const dragDelta = useMemo(() => {
     if (!drag) return null;
     const origin = posById.get(drag.id);
     return origin ? { x: drag.x - origin.x, y: drag.y - origin.y } : null;
   }, [drag, posById]);
 
+  /** Blocos que não podem receber o bloco solto (ele mesmo e seus descendentes). */
+  const rewireBlocked = useMemo(() => (rewire ? new Set(branchIds(nodes, rewire)) : null), [rewire, nodes]);
+
   const flow = useMemo(() => {
     const flowNodes: MindFlowNode[] = [];
-    const flowEdges: Edge[] = [];
+    const flowEdges: MindFlowEdge[] = [];
     for (const pos of positions) {
       const node = nodes[pos.id];
       if (!node) continue;
-      const color = colorOf.get(node.id) ?? ROOT_COLOR;
+      const paint = painted.get(node.id);
+      const color = paint?.color ?? theme.rootColor;
+      const depth = paint?.depth ?? 0;
       const isDragging = drag?.id === node.id;
-      const moving = dragDelta && dragBranch?.has(node.id);
+      const moving = dragDelta && (isDragging || dragBranch?.has(node.id));
+      // Tema com ramos preenchidos: a raiz e o 1º nível nascem pintados
+      // (como na referência do MindMeister).
+      const themeFill = theme.filledBranches && depth <= 1 ? color : null;
+      const fill = node.fill ?? themeFill;
       flowNodes.push({
         id: node.id,
         type: 'mind',
@@ -192,17 +228,20 @@ export function MindMapCanvas({
         origin: [pos.side === 'left' ? 1 : pos.side === 'root' ? 0.5 : 0, 0.5],
         selected: node.id === selectedId,
         // A raiz também arrasta (SPEC-006 §5.1): arrastá-la move o mapa inteiro.
-        draggable: canEdit && editing?.id !== node.id,
+        draggable: canEdit && editing?.id !== node.id && !rewire,
         zIndex: isDragging ? 10 : 0,
         measured: measured.current.get(node.id),
         data: stableData(dataCache.current, node.id, {
           text: node.text,
           side: pos.side,
           color,
-          shape: node.shape ?? 'rounded',
-          fill: node.fill ?? null,
-          ink: node.fill ? readableInk(node.fill) : null,
+          shape: node.shape ?? theme.shape,
+          fill,
+          ink: node.ink ?? (fill ? readableInk(fill) : null),
           dropTarget: drag?.target === node.id,
+          // No modo religar, o que não pode receber fica apagado (§5.2).
+          blocked: !!rewireBlocked?.has(node.id),
+          picking: !!rewire && !rewireBlocked?.has(node.id),
           bold: node.bold ?? false,
           hasHiddenChildren: !!node.collapsed && (index.get(node.id)?.length ?? 0) > 0,
           editing: editing?.id === node.id,
@@ -217,7 +256,9 @@ export function MindMapCanvas({
           onOpenNote: onOpenNoteStable,
         }),
       });
-      if (node.parentId && !isDragging) {
+      // A ligação continua desenhada enquanto se arrasta (SPEC-007 §5.1): ela
+      // estica junto com o bloco, em vez de sumir.
+      if (node.parentId) {
         const left = pos.side === 'left';
         flowEdges.push({
           id: `${node.parentId}->${node.id}`,
@@ -225,8 +266,16 @@ export function MindMapCanvas({
           target: node.id,
           sourceHandle: left ? 's-l' : 's-r',
           targetHandle: left ? 't-r' : 't-l',
-          type: 'default',
-          style: { stroke: color, strokeWidth: 2 },
+          type: 'mind',
+          selected: selectedEdge === `${node.parentId}->${node.id}`,
+          zIndex: 0,
+          data: stableData(edgeCache.current, `${node.parentId}->${node.id}`, {
+            color,
+            width: edgeWidthForDepth(theme.edge.width, depth),
+            taper: theme.edge.taper,
+            canCut: canEdit && !rewire,
+            onCut: onCutEdge,
+          }),
         });
       }
     }
@@ -239,14 +288,22 @@ export function MindMapCanvas({
         measured.current.delete(id);
       }
     }
+    if (edgeCache.current.size > flowEdges.length) {
+      const alive = new Set(flowEdges.map((e) => e.id));
+      for (const id of edgeCache.current.keys()) if (!alive.has(id)) edgeCache.current.delete(id);
+    }
     return { flowNodes, flowEdges };
   }, [
     positions,
     nodes,
-    colorOf,
+    painted,
+    theme,
     drag,
     dragBranch,
     dragDelta,
+    rewire,
+    rewireBlocked,
+    selectedEdge,
     selectedId,
     canEdit,
     editing,
@@ -256,6 +313,7 @@ export function MindMapCanvas({
     takePending,
     onAddChild,
     onOpenNoteStable,
+    onCutEdge,
   ]);
 
   // ---------- navegação por setas ----------
@@ -304,6 +362,18 @@ export function MindMapCanvas({
     }
   };
 
+  /** Religa o bloco solto em `parentId`, se for um destino válido (§5.2). */
+  const finishRewire = (parentId: string) => {
+    const child = rewire;
+    setRewire(null);
+    setSelectedEdge(null);
+    if (!child || !canEdit) return;
+    if (child === parentId || isInBranch(nodes, child, parentId)) return; // ciclo
+    newStep();
+    if (reparentNode(doc, child, parentId, LOCAL_ORIGIN)) onSelect(child);
+    focusCanvas();
+  };
+
   const actions: NodeActions = {
     createChild: (id) => {
       if (canEdit && nodes[id]) createNode(id);
@@ -347,6 +417,11 @@ export function MindMapCanvas({
       newStep();
       updateNode(doc, id, { fill }, LOCAL_ORIGIN);
     },
+    setInk: (id, ink) => {
+      if (!canEdit) return;
+      newStep();
+      updateNode(doc, id, { ink }, LOCAL_ORIGIN);
+    },
     setShape: (id, shape) => {
       if (!canEdit) return;
       newStep();
@@ -374,6 +449,15 @@ export function MindMapCanvas({
       onSelect(id);
       onOpenNote(id);
     },
+    cutEdge: (childId) => {
+      if (!canEdit || !nodes[childId]?.parentId) return;
+      onSelect(childId);
+      setSelectedEdge(null);
+      setRewire(childId);
+      focusCanvas();
+    },
+    toggleBranchDrag: () => setBranchDrag((on) => !on),
+    branchDrag,
     focusCanvas,
   };
   actionsRef.current = actions;
@@ -408,6 +492,19 @@ export function MindMapCanvas({
     const node = nodes[id];
     if (!node) return;
 
+    // Cortar e colar o ramo em outro pai (SPEC-007 §5.2). É um recorte interno:
+    // nada é lido nem escrito na área de transferência do sistema.
+    if (canEdit && mod && (e.key === 'x' || e.key === 'X')) {
+      e.preventDefault();
+      actions.cutEdge(node.id);
+      return;
+    }
+    if (canEdit && mod && (e.key === 'v' || e.key === 'V') && rewire) {
+      e.preventDefault();
+      finishRewire(node.id);
+      return;
+    }
+
     if (e.key.startsWith('Arrow')) {
       e.preventDefault();
       // Ctrl+↑/↓ troca a ordem entre irmãos (SPEC-006 §5.2); as setas sozinhas navegam.
@@ -420,7 +517,12 @@ export function MindMapCanvas({
       if (next) onSelect(next);
       return;
     }
-    if (e.key === 'Escape') return onSelect(null);
+    if (e.key === 'Escape') {
+      // Cancelar o religar vem antes de limpar a seleção.
+      if (rewire) return setRewire(null);
+      if (selectedEdge) return setSelectedEdge(null);
+      return onSelect(null);
+    }
     if (!canEdit) return;
 
     if (e.key === 'Tab') {
@@ -455,29 +557,34 @@ export function MindMapCanvas({
     return getIntersectingNodes(dragged).find((n) => !isInBranch(nodes, dragged.id, n.id))?.id ?? null;
   };
 
-  const onNodeDragStop = (_: unknown, dragged: Node) => {
+  const withBranch = (event: { shiftKey?: boolean }) => !!event.shiftKey || branchDrag;
+
+  const onNodeDragStop = (event: { shiftKey?: boolean }, dragged: Node) => {
     const target = drag?.target ?? null;
     setDrag(null);
     const node = nodes[dragged.id];
     if (!node || !canEdit) return;
 
     if (target && node.parentId !== null) {
-      // Troca de pai: o bloco volta à posição automática sob o novo pai (SPEC-006 §5.1).
+      // Troca de pai: o bloco volta à posição automática sob o novo pai, e tudo
+      // numa transação só (SPEC-007 §5.2).
       newStep();
-      moveNode(doc, dragged.id, target, undefined, LOCAL_ORIGIN);
-      setNodeOffset(doc, dragged.id, null, LOCAL_ORIGIN);
+      reparentNode(doc, dragged.id, target, LOCAL_ORIGIN);
       return;
     }
-    // Posição livre: deslocamento relativo ao pai renderizado (a raiz, à origem).
-    const parentPos = node.parentId ? posById.get(node.parentId) : { x: 0, y: 0, side: 'root' as const };
-    if (!parentPos) return;
+    const to = { x: dragged.position.x, y: dragged.position.y };
     newStep();
-    setNodeOffset(
-      doc,
-      dragged.id,
-      { dx: dragged.position.x - parentPos.x, dy: dragged.position.y - parentPos.y },
-      LOCAL_ORIGIN,
-    );
+    if (withBranch(event) || node.parentId === null) {
+      // Ramo inteiro (ou o mapa, pela raiz): basta deslocar este bloco.
+      const parentPos = node.parentId ? posById.get(node.parentId) : { x: 0, y: 0 };
+      if (!parentPos) return;
+      setNodeOffsets(doc, [{ id: dragged.id, offset: { dx: to.x - parentPos.x, dy: to.y - parentPos.y } }], LOCAL_ORIGIN);
+      return;
+    }
+    // Só este bloco: os filhos diretos recebem a compensação que os deixa parados.
+    const childIds = (index.get(dragged.id) ?? []).map((child) => child.id);
+    const entries = offsetsForSoloMove(posById, dragged.id, node.parentId, childIds, to);
+    if (entries.length > 0) setNodeOffsets(doc, entries, LOCAL_ORIGIN);
   };
 
   const selectedNode = selectedId ? nodes[selectedId] : undefined;
@@ -488,19 +595,24 @@ export function MindMapCanvas({
       ref={wrapperRef}
       tabIndex={0}
       onKeyDown={onKeyDown}
-      className="h-full w-full outline-none"
+      className={`h-full w-full outline-none ${rewire ? 'cursor-crosshair' : ''}`}
       aria-label="Mapa mental. Use as setas para navegar."
     >
       <ReactFlow
         nodes={flow.flowNodes}
         edges={flow.flowEdges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         nodesConnectable={false}
         edgesFocusable={false}
         deleteKeyCode={null}
         selectionKeyCode={null}
         multiSelectionKeyCode={null}
         onNodeClick={(e, n) => {
+          if (rewire) {
+            finishRewire(n.id);
+            return;
+          }
           // `detail >= 2` é o segundo clique de um duplo clique, segundo o próprio
           // navegador. O evento `dblclick` sozinho não basta: quando o primeiro
           // clique troca a seleção, ele pode ir para o fundo (SPEC-002 §5.8).
@@ -509,16 +621,30 @@ export function MindMapCanvas({
             setEditing({ id: n.id, draft: null });
             return;
           }
+          setSelectedEdge(null);
           onSelect(n.id);
           focusCanvas();
         }}
-        onNodeDoubleClick={(_, n) => canEdit && setEditing({ id: n.id, draft: null })}
+        onNodeDoubleClick={(_, n) => canEdit && !rewire && setEditing({ id: n.id, draft: null })}
+        onEdgeClick={(_, edge) => {
+          if (rewire) return;
+          setSelectedEdge((current) => (current === edge.id ? null : edge.id));
+          onSelect(null);
+          focusCanvas();
+        }}
         zoomOnDoubleClick={false}
-        onNodeDragStart={(_, n) => onSelect(n.id)}
-        onNodeDrag={(_, n) => setDrag({ id: n.id, x: n.position.x, y: n.position.y, target: dropTargetOf(n) })}
+        onNodeDragStart={(_, n) => {
+          setSelectedEdge(null);
+          onSelect(n.id);
+        }}
+        onNodeDrag={(e, n) =>
+          setDrag({ id: n.id, x: n.position.x, y: n.position.y, target: dropTargetOf(n), branch: withBranch(e) })
+        }
         onNodeDragStop={onNodeDragStop}
         onNodesChange={onNodesChange}
         onPaneClick={() => {
+          setRewire(null);
+          setSelectedEdge(null);
           onSelect(null);
           focusCanvas();
         }}
@@ -538,11 +664,35 @@ export function MindMapCanvas({
           }}
           canTidy={hasManualPositions}
         />
-        {selectedNode && !editing && !drag && (
+        {rewire && (
+          <Panel position="top-center" className="export-hidden !mt-3">
+            <div
+              role="status"
+              className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2 text-sm shadow-md"
+            >
+              <span>
+                Escolha o novo tópico-pai de <strong>{nodes[rewire]?.text || 'sem título'}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setRewire(null);
+                  focusCanvas();
+                }}
+                className="rounded-lg px-2 py-1 text-xs font-medium text-muted hover:bg-surface-2 hover:text-ink"
+              >
+                Cancelar (Esc)
+              </button>
+            </div>
+          </Panel>
+        )}
+        {selectedNode && !editing && !drag && !rewire && (
           <NodeActionBar
             key={selectedNode.id}
             node={selectedNode}
             canEdit={canEdit}
+            palette={theme.branches}
+            defaultShape={theme.shape}
             hasChildren={(index.get(selectedNode.id)?.length ?? 0) > 0}
             siblingCount={selectedNode.parentId ? (index.get(selectedNode.parentId)?.length ?? 0) : 0}
             branchMoved={branchIds(nodes, selectedNode.id).some((bid) => nodes[bid]?.dx !== undefined)}
@@ -553,4 +703,3 @@ export function MindMapCanvas({
     </div>
   );
 }
-

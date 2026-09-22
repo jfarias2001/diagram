@@ -2,7 +2,18 @@ import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
 import { addEdge, addShape, createDiagramDoc, readDiagram, updateShapes } from './diagram.js';
 import { applySnapshotState } from './restore.js';
-import { addNode, createMindMapDoc, deleteBranch, encodeDoc, nodesMap, readNodes, updateNode } from './ydoc.js';
+import {
+  addNode,
+  createMindMapDoc,
+  deleteBranch,
+  encodeDoc,
+  nodesMap,
+  readNodes,
+  readStyle,
+  setDocumentStyle,
+  styleMap,
+  updateNode,
+} from './ydoc.js';
 
 // SPEC-005 §2.3 — restaurar reconcilia o conteúdo vivo com o da versão.
 
@@ -90,5 +101,36 @@ describe('applySnapshotState no fluxograma', () => {
     expect(snap.shapes.s1!.text).toBe('Começo');
     expect(snap.shapes.s1!.fill).toBeUndefined();
     expect(snap.edges.e1).toMatchObject({ source: 's1', target: 's2', label: 'Sim' });
+  });
+});
+
+describe('applySnapshotState no estilo do documento (SPEC-007 §2.3)', () => {
+  it('restaurar devolve o tema, a fonte e o fundo daquela versão', () => {
+    const doc = mapDoc();
+    setDocumentStyle(doc, { theme: 'oceano', font: 'manuscrita', background: '#101820' });
+    const versao = encodeDoc(doc);
+
+    setDocumentStyle(doc, { theme: 'neon', font: 'mono', background: '' });
+    applySnapshotState(doc, versao);
+    expect(readStyle(doc)).toEqual({ theme: 'oceano', font: 'manuscrita', background: '#101820' });
+  });
+
+  it('versão sem estilo volta ao tema padrão', () => {
+    const doc = mapDoc();
+    const versao = encodeDoc(doc); // antes de qualquer tema
+    setDocumentStyle(doc, { theme: 'neon' });
+    applySnapshotState(doc, versao);
+    expect(readStyle(doc)).toEqual({});
+  });
+
+  it('estilo adulterado numa versão antiga não volta', () => {
+    const doc = mapDoc();
+    styleMap(doc).set('theme', 'url(javascript:alert(1))');
+    styleMap(doc).set('background', '#fff;position:fixed');
+    const versao = encodeDoc(doc);
+
+    const alvo = mapDoc();
+    applySnapshotState(alvo, versao);
+    expect(readStyle(alvo)).toEqual({});
   });
 });

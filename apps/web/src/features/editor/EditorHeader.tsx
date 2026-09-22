@@ -7,9 +7,8 @@ import { Link } from 'react-router';
 import { Avatar, Button, colorFor } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useMe } from '../auth/session';
-import type { BoardTheme } from './boardTheme';
 import { exportCanvasPng } from './exportPng';
-import { IconMoon, IconSun } from './icons';
+import { IconTheme } from './icons';
 import { ShareDialog } from './ShareDialog';
 import type { CollabState, SaveStatus } from './useCollab';
 
@@ -20,15 +19,17 @@ export function EditorHeader({
   meta,
   state,
   provider,
-  board,
+  appearanceOpen,
+  onToggleAppearance,
   historyOpen,
   onToggleHistory,
 }: {
   meta: DocumentSummary;
   state: CollabState;
   provider: HocuspocusProvider;
-  /** Tema do quadro (SPEC-006 §5.5) — preferência de quem está olhando. */
-  board: { theme: BoardTheme; toggle: () => void };
+  /** Painel de aparência (SPEC-007 §5.3): tema, fonte e fundo do documento. */
+  appearanceOpen: boolean;
+  onToggleAppearance: () => void;
   /** Painel de histórico (SPEC-005 §5.1), quando o editor o oferece. */
   historyOpen?: boolean;
   onToggleHistory?: () => void;
@@ -60,7 +61,10 @@ export function EditorHeader({
               Histórico
             </Button>
           )}
-          <BoardThemeToggle theme={board.theme} onToggle={board.toggle} />
+          <Button aria-pressed={appearanceOpen} onClick={onToggleAppearance} title="Tema, fonte e fundo do documento">
+            <IconTheme />
+            Aparência
+          </Button>
           <ExportButton title={meta.title} />
           <Button variant="primary" onClick={() => setSharing(true)}>
             Compartilhar
@@ -157,23 +161,6 @@ function Presence({ provider }: { provider: HocuspocusProvider }) {
       ))}
       {people.length > 5 && <Avatar name={`+${people.length - 5}`} color="#667085" />}
     </div>
-  );
-}
-
-/** Interruptor sol/lua do quadro (SPEC-006 §5.5). Vale para todos os papéis. */
-function BoardThemeToggle({ theme, onToggle }: { theme: BoardTheme; onToggle: () => void }) {
-  const label = theme === 'dark' ? 'Mudar o quadro para o modo claro' : 'Mudar o quadro para o modo escuro';
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      aria-pressed={theme === 'dark'}
-      onClick={onToggle}
-      className="flex h-9 w-9 items-center justify-center rounded-lg text-muted transition hover:bg-surface-2 hover:text-ink"
-    >
-      {theme === 'dark' ? <IconSun /> : <IconMoon />}
-    </button>
   );
 }
 

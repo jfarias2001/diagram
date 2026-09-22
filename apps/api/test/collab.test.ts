@@ -1,6 +1,8 @@
 import {
   addEdge,
   addNode,
+  readStyle,
+  setDocumentStyle,
   addShape,
   decodeDoc,
   deleteBranch,
@@ -93,11 +95,15 @@ async function setup() {
   return { id, owner, editor, viewer, outsider };
 }
 
-async function storedNodes(id: string) {
+async function storedState(id: string): Promise<Uint8Array> {
   app.collab.instance.flushPendingStores();
   await new Promise((r) => setTimeout(r, 300));
   const row = await app.prisma.document.findUniqueOrThrow({ where: { id }, select: { yState: true } });
-  return readNodes(decodeDoc(new Uint8Array(row.yState!)));
+  return new Uint8Array(row.yState!);
+}
+
+async function storedNodes(id: string) {
+  return readNodes(decodeDoc(await storedState(id)));
 }
 
 describe('WebSocket /collab', () => {
@@ -225,6 +231,36 @@ describe('WebSocket /collab', () => {
     expect(readNodes(a.doc).root).toMatchObject({ dy: -80, shape: 'ellipse', fill: '#d0ebff' });
     const stored = await storedNodes(id);
     expect(stored.root).toMatchObject({ dx: 120, shape: 'ellipse' });
+  });
+
+  it('editor troca o tema e o colega vê na hora (SPEC-007 §4)', async () => {
+    const { id, owner, editor } = await setup();
+    const a = connect(owner.cookie, id);
+    const e = connect(editor.cookie, id);
+    await waitFor(() => a.state.synced && e.state.synced);
+
+    setDocumentStyle(e.doc, { theme: 'oceano', font: 'manuscrita', background: '#101820' });
+    await waitFor(() => readStyle(a.doc).theme === 'oceano');
+
+    expect(readStyle(a.doc)).toEqual({ theme: 'oceano', font: 'manuscrita', background: '#101820' });
+    const stored = decodeDoc(await storedState(id));
+    expect(readStyle(stored).theme).toBe('oceano');
+  });
+
+  it('leitor não troca tema, fonte nem fundo forjando o WebSocket (SPEC-007 §6)', async () => {
+    const { id, owner, viewer } = await setup();
+    const a = connect(owner.cookie, id);
+    const v = connect(viewer.cookie, id);
+    await waitFor(() => a.state.synced && v.state.synced);
+
+    setDocumentStyle(v.doc, { theme: 'neon', font: 'mono', background: '#000000' });
+    // Escrita crua, sem passar pelas funções do shared.
+    v.doc.getMap('style').set('theme', 'grafite');
+    await new Promise((r) => setTimeout(r, 800));
+
+    expect(readStyle(a.doc)).toEqual({});
+    const stored = decodeDoc(await storedState(id));
+    expect(readStyle(stored)).toEqual({});
   });
 
   it('restaurar uma versão chega a quem está com o documento aberto (SPEC-005 §4)', async () => {

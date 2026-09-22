@@ -28,13 +28,13 @@ export const PALETTE_ORDER: ShapeKind[] = [
   'text',
 ];
 
-/** Cores do documento: fixas (claras), para ficarem iguais em qualquer tema (§5.3). */
+/**
+ * Cores de último recurso (SPEC-007 §5.3): o que vale mesmo são as do tema do
+ * documento, resolvidas em `DiagramCanvas`. Estas só aparecem nas miniaturas da
+ * paleta de formas, que ficam fora do quadro.
+ */
 export const DEFAULT_FILL = '#ffffff';
 export const DEFAULT_STROKE = '#475467';
-export const SHAPE_INK = '#1b2230';
-
-export const FILL_COLORS = ['#ffffff', '#fff3bf', '#ffe8cc', '#ffe3e3', '#f3d9fa', '#dbe4ff', '#d0ebff', '#c3fae8', '#d3f9d8'];
-export const STROKE_COLORS = ['#475467', '#e8590c', '#1c7ed6', '#2f9e44', '#ae3ec9', '#f08c00', '#0c8599', '#d6336c', '#5c7cfa'];
 
 /** Margem interna do texto em cada forma, em % da largura/altura. */
 export const TEXT_INSET: Record<ShapeKind, { x: number; y: number }> = {

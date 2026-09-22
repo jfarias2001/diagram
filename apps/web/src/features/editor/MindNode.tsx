@@ -16,6 +16,10 @@ export type MindNodeData = {
   ink: string | null;
   /** Bloco sob o ponteiro durante um arrasto: soltar aqui troca o pai. */
   dropTarget: boolean;
+  /** Modo religar (SPEC-007 §5.2): este bloco não pode receber o bloco solto. */
+  blocked: boolean;
+  /** Modo religar: este bloco é um destino possível. */
+  picking: boolean;
   bold: boolean;
   hasHiddenChildren: boolean;
   editing: boolean;
@@ -123,10 +127,12 @@ function MindNodeComponent({ id, data, selected }: NodeProps<MindFlowNode>) {
         'group relative text-ink',
         CSS_SHAPE_CLASS[shape],
         data.fill || drawn ? '' : 'bg-surface',
-        isRoot ? 'px-6 py-3 font-display text-lg font-semibold' : 'px-3.5 py-1.5 text-sm',
+        isRoot ? 'px-6 py-3 text-lg font-semibold' : 'px-3.5 py-1.5 text-sm',
         data.bold ? 'font-bold' : '',
         selected && !drawn ? 'node-lit' : '',
         data.dropTarget ? 'drop-target' : '',
+        data.blocked ? 'rewire-blocked' : '',
+        data.picking ? 'rewire-target' : '',
       ].join(' ')}
       style={{
         borderColor: data.color,

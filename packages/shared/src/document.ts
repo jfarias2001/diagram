@@ -54,6 +54,8 @@ export const mindMapNodeSchema = z.object({
   shape: z.enum(NODE_SHAPES).optional(),
   /** Cor de preenchimento do bloco. Ausente = fundo do quadro. */
   fill: z.string().regex(HEX_COLOR).optional(),
+  /** Cor do texto escolhida à mão (SPEC-007 §2.2). Ausente = cor sugerida. */
+  ink: z.string().regex(HEX_COLOR).optional(),
 });
 
 export type MindMapNode = z.infer<typeof mindMapNodeSchema>;
@@ -93,17 +95,20 @@ export function relativeLuminance(hex: string): number {
   return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
 }
 
+/** Razão de contraste (WCAG 2.1) entre duas cores `#rrggbb`. */
+export function contrastRatio(a: string, b: string): number {
+  if (!HEX_COLOR.test(a) || !HEX_COLOR.test(b)) return 1;
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const [light, dark] = la > lb ? [la, lb] : [lb, la];
+  return (light + 0.05) / (dark + 0.05);
+}
+
 /**
  * Cor de texto legível sobre `fill` (SPEC-006 §5.4). Escolhe entre o tom escuro
  * e o claro o que der maior contraste — nunca fica texto cinza em fundo cinza.
  */
 export function readableInk(fill: string): string {
   if (!HEX_COLOR.test(fill)) return INK_ON_LIGHT;
-  const background = relativeLuminance(fill);
-  const contrast = (ink: string) => {
-    const other = relativeLuminance(ink);
-    const [light, dark] = background > other ? [background, other] : [other, background];
-    return (light + 0.05) / (dark + 0.05);
-  };
-  return contrast(INK_ON_DARK) > contrast(INK_ON_LIGHT) ? INK_ON_DARK : INK_ON_LIGHT;
+  return contrastRatio(INK_ON_DARK, fill) > contrastRatio(INK_ON_LIGHT, fill) ? INK_ON_DARK : INK_ON_LIGHT;
 }

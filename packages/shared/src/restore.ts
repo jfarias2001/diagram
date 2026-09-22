@@ -1,7 +1,7 @@
 import * as Y from 'yjs';
 import { readDiagram, repairDiagram } from './diagram.js';
 import type { MindMapNode } from './document.js';
-import { readNodes, repairTree } from './ydoc.js';
+import { readNodes, readStyle, repairTree, styleMap } from './ydoc.js';
 
 // Restaurar uma versão (SPEC-005 §2.3). Em vez de trocar o estado binário — o
 // que quebraria a sincronização de quem está com o documento aberto —, o
@@ -44,7 +44,17 @@ export function applySnapshotState(live: Y.Doc, state: Uint8Array, origin?: unkn
     edges: Object.fromEntries(Object.entries(diagram.edges).map(([id, e]) => [id, omitId(e)])),
   };
 
+  const style = readStyle(from);
+
   live.transact(() => {
+    // Estilo do documento (SPEC-007 §2.3): mapa plano de campos, não de
+    // entidades por id — o que a versão não tem volta ao padrão do tema.
+    const styleTarget = styleMap(live);
+    for (const key of [...styleTarget.keys()]) {
+      if (!(key in style)) styleTarget.delete(key);
+    }
+    for (const [key, value] of Object.entries(style)) styleTarget.set(key, value);
+
     for (const name of CONTENT_MAPS) {
       const map = live.getMap<Y.Map<unknown>>(name);
       const target = content[name];

@@ -1,13 +1,15 @@
 import { SHAPE_TEXT_MAX, type ShapeKind } from '@diagram/shared';
 import { Handle, type Node, type NodeProps, NodeResizer, Position, useConnection } from '@xyflow/react';
 import { memo, useEffect, useRef, useState } from 'react';
-import { DEFAULT_FILL, DEFAULT_STROKE, SHAPE_INK, ShapeSvg, TEXT_INSET } from './shapes';
+import { DEFAULT_FILL, DEFAULT_STROKE, ShapeSvg, TEXT_INSET } from './shapes';
 
 export type ShapeNodeData = {
   kind: ShapeKind;
   text: string;
   fill: string;
   stroke: string;
+  /** Cor do texto, já resolvida pelo tema ou pela escolha da pessoa. */
+  ink: string;
   bold: boolean;
   editing: boolean;
   /** Texto inicial quando a edição começou digitando. */
@@ -37,7 +39,7 @@ function ShapeNodeComponent({ id, data, selected }: NodeProps<ShapeFlowNode>) {
   const isTerminator = data.kind === 'terminator';
 
   return (
-    <div className="group relative h-full w-full" style={{ color: SHAPE_INK }}>
+    <div className="group relative h-full w-full" style={{ color: data.ink }}>
       {data.canEdit && (
         <NodeResizer
           isVisible={!!selected}

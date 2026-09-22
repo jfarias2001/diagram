@@ -46,8 +46,10 @@ export function estimateSize(
   isRoot = false,
   icons = 0,
   shape: NodeShape = 'rounded',
+  /** Largura média da fonte em uso, relativa à padrão (SPEC-007 §5.4). */
+  widthFactor = 1,
 ): { width: number; height: number } {
-  const charW = isRoot ? ROOT_CHAR_W : CHAR_W;
+  const charW = (isRoot ? ROOT_CHAR_W : CHAR_W) * widthFactor;
   const extra = SHAPE_PADDING[shape] ?? SHAPE_PADDING.rounded;
   const padX = (isRoot ? 52 : 32) + extra.x;
   const maxW = isRoot ? ROOT_MAX_W : MAX_W;
@@ -70,7 +72,7 @@ export function estimateSize(
  * direita e a outra metade à esquerda. Ramos colapsados não entram.
  * Colunas se ajustam ao nó mais largo de cada nível; linhas, à altura de cada nó.
  */
-export function layoutMindMap(nodes: Record<string, MindMapNode>): PositionedNode[] {
+export function layoutMindMap(nodes: Record<string, MindMapNode>, widthFactor = 1): PositionedNode[] {
   const index = childrenIndex(nodes);
   const root = findRoot(nodes);
   if (!root) return [];
@@ -85,6 +87,7 @@ export function layoutMindMap(nodes: Record<string, MindMapNode>): PositionedNod
         id === root.id,
         (node?.note ? 1 : 0) + (node?.link ? 1 : 0),
         node?.shape ?? 'rounded',
+        widthFactor,
       );
       size.set(id, s);
     }
@@ -160,8 +163,8 @@ export function layoutMindMap(nodes: Record<string, MindMapNode>): PositionedNod
  * Um nó movido à mão arrasta o ramo inteiro sem que nada seja escrito nos
  * filhos, e um filho novo (sem dx/dy) nasce na posição automática perto do pai.
  */
-export function resolvePositions(nodes: Record<string, MindMapNode>): PositionedNode[] {
-  const auto = layoutMindMap(nodes);
+export function resolvePositions(nodes: Record<string, MindMapNode>, widthFactor = 1): PositionedNode[] {
+  const auto = layoutMindMap(nodes, widthFactor);
   const hasManual = auto.some((p) => nodes[p.id]?.dx !== undefined);
   if (!hasManual) return auto;
 
@@ -196,3 +199,37 @@ export function resolvePositions(nodes: Record<string, MindMapNode>): Positioned
 }
 
 export { branchIds, childrenIndex, isInBranch, orderBetween } from '@diagram/shared';
+
+/**
+ * Deslocamentos a gravar quando um bloco é arrastado sozinho (SPEC-007 §5.1).
+ *
+ * O bloco vai para `to`; cada filho direto recebe o deslocamento que o deixa
+ * exatamente onde já estava, porque a posição continua sendo relativa ao pai:
+ *
+ *   pos'(filho) = pos'(bloco) + rel'(filho)
+ *               = (pos(bloco) + Δ) + (pos(filho) - pos(bloco) - Δ)
+ *               = pos(filho)
+ *
+ * Devolve uma lista só, para `setNodeOffsets` gravar tudo numa transação.
+ */
+export function offsetsForSoloMove(
+  positions: Map<string, PositionedNode>,
+  nodeId: string,
+  parentId: string | null,
+  childIds: string[],
+  to: { x: number; y: number },
+): Array<{ id: string; offset: { dx: number; dy: number } }> {
+  const from = positions.get(nodeId);
+  if (!from) return [];
+  const parent = parentId ? positions.get(parentId) : { x: 0, y: 0 };
+  if (!parent) return [];
+  const dxTotal = to.x - from.x;
+  const dyTotal = to.y - from.y;
+  const out = [{ id: nodeId, offset: { dx: to.x - parent.x, dy: to.y - parent.y } }];
+  for (const childId of childIds) {
+    const child = positions.get(childId);
+    if (!child) continue; // ramo recolhido: não é desenhado, então não se move
+    out.push({ id: childId, offset: { dx: child.x - from.x - dxTotal, dy: child.y - from.y - dyTotal } });
+  }
+  return out;
+}
