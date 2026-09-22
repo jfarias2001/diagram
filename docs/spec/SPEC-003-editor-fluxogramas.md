@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Rascunho |
+| Status | **Aprovado** (2026-09-22) |
 | PRD | [PRD-003](../prd/PRD-003-editor-fluxogramas.md) |
 | ADRs | [ADR-001](../adr/ADR-001-stack.md) (React Flow + `elkjs`), [ADR-002](../adr/ADR-002-colaboracao-tempo-real.md) |
 | Data | 2026-09-22 |
