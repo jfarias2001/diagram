@@ -20,6 +20,16 @@ enum DocumentType {
   DIAGRAM
 }
 
+/// Tipo de versão guardada (SPEC-005 §2.1).
+enum SnapshotKind {
+  /// Periódica, ou ao sair o último editor.
+  AUTO
+  /// Criada por uma pessoa, com nome.
+  NAMED
+  /// Guardada antes de restaurar ou de uma operação grande.
+  CHECKPOINT
+}
+
 enum MemberRole {
   OWNER
   EDITOR
@@ -78,9 +88,31 @@ model Document {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   members        DocumentMember[]
+  snapshots      Snapshot[]
 
   @@index([ownerId, trashedAt])
   @@index([trashedAt])
+}
+
+/// Versão congelada do documento (SPEC-005 §2.1). Apagar o documento de vez
+/// apaga o histórico; mandar para a lixeira não.
+model Snapshot {
+  id          String       @id @default(cuid())
+  documentId  String
+  document    Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  kind        SnapshotKind
+  /// Só em NAMED e CHECKPOINT ("Antes de restaurar…").
+  name        String?
+  /// Estado do Y.Doc, igual ao Document.yState.
+  state       Bytes
+  sizeBytes   Int
+  /// Quem editou no intervalo coberto por esta versão. Só ids.
+  editorIds   String[]     @default([])
+  createdById String?
+  createdAt   DateTime     @default(now())
+
+  @@index([documentId, createdAt])
+  @@index([kind, createdAt])
 }
 
 model DocumentMember {

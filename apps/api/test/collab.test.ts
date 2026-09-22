@@ -3,6 +3,7 @@ import {
   addNode,
   addShape,
   decodeDoc,
+  deleteBranch,
   readDiagram,
   readNodes,
   setNodeOffset,
@@ -20,7 +21,8 @@ let wsUrl: string;
 const open: Array<{ destroy(): void }> = [];
 
 beforeAll(async () => {
-  app = await createTestApp();
+  // Intervalo curto para as versões automáticas caberem no teste (SPEC-005 §4).
+  app = await createTestApp({ SNAPSHOT_INTERVAL_MINUTES: '0.0001' });
   const address = await app.listen({ port: 0, host: '127.0.0.1' });
   wsUrl = `${address.replace('http', 'ws')}/collab`;
 });
@@ -223,6 +225,53 @@ describe('WebSocket /collab', () => {
     expect(readNodes(a.doc).root).toMatchObject({ dy: -80, shape: 'ellipse', fill: '#d0ebff' });
     const stored = await storedNodes(id);
     expect(stored.root).toMatchObject({ dx: 120, shape: 'ellipse' });
+  });
+
+  it('restaurar uma versão chega a quem está com o documento aberto (SPEC-005 §4)', async () => {
+    const { id, owner, editor } = await setup();
+    const a = connect(owner.cookie, id);
+    const e = connect(editor.cookie, id);
+    await waitFor(() => a.state.synced && e.state.synced);
+
+    addNode(e.doc, { id: 'ramo', parentId: 'root', text: 'Ramo importante' });
+    await waitFor(() => readNodes(a.doc).ramo !== undefined);
+
+    const versao = await call(app, owner.cookie, 'POST', `/documents/${id}/versions`, {
+      kind: 'NAMED',
+      name: 'Com o ramo',
+    });
+    expect(versao.statusCode).toBe(201);
+
+    // Alguém apaga o ramo, e os dois veem sumir.
+    deleteBranch(e.doc, 'ramo');
+    await waitFor(() => readNodes(a.doc).ramo === undefined);
+
+    const restore = await call(app, owner.cookie, `POST`, `/documents/${id}/versions/${versao.json().id}/restore`);
+    expect(restore.statusCode).toBe(200);
+
+    // Sem recarregar: o ramo volta nas duas abas.
+    await waitFor(() => readNodes(a.doc).ramo !== undefined && readNodes(e.doc).ramo !== undefined);
+    expect(readNodes(a.doc).ramo?.text).toBe('Ramo importante');
+  });
+
+  it('versão automática é criada pelo servidor, com quem editou (SPEC-005 §4)', async () => {
+    const { id, editor } = await setup();
+    const e = connect(editor.cookie, id);
+    await waitFor(() => e.state.synced);
+
+    // A primeira gravação só marca o começo do intervalo; a versão sai na seguinte.
+    addNode(e.doc, { id: 'auto', parentId: 'root', text: 'Editado por quem tem papel' });
+    await waitFor(async () => (await storedNodes(id)).auto !== undefined);
+    updateNode(e.doc, 'auto', { text: 'Editado por quem tem papel, de novo' });
+    await waitFor(async () => (await app.prisma.snapshot.count({ where: { documentId: id, kind: 'AUTO' } })) > 0);
+
+    const snapshot = await app.prisma.snapshot.findFirstOrThrow({
+      where: { documentId: id, kind: 'AUTO' },
+      select: { editorIds: true, state: true, name: true },
+    });
+    expect(snapshot.name).toBeNull();
+    expect(snapshot.editorIds).toContain(editor.user.id);
+    expect(readNodes(decodeDoc(new Uint8Array(snapshot.state))).auto?.text).toContain('Editado por quem tem papel');
   });
 
   it('fluxograma: editor desenha, colega recebe, busca encontra; leitor forjando é descartado (SPEC-003 §7)', async () => {

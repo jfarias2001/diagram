@@ -57,15 +57,18 @@ type Draft = Record<string, { x: number; y: number; w?: number; h?: number }>;
 interface Props {
   doc: Y.Doc;
   diagram: DiagramSnapshot;
-  provider: HocuspocusProvider;
+  /** Sem provider (modo versão, SPEC-005 §5.2): sem presença e sem awareness. */
+  provider: HocuspocusProvider | null;
   canEdit: boolean;
   undo: Y.UndoManager | null;
+  /** Guarda uma versão antes de uma operação grande (SPEC-005 §5.3). */
+  onCheckpoint?: (name: string) => void;
 }
 
 const newId = () => crypto.randomUUID();
 const snapToGridValue = (v: number) => Math.round(v / GRID) * GRID;
 
-export function DiagramCanvas({ doc, diagram, provider, canEdit, undo }: Props) {
+export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpoint }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition, getZoom } = useReactFlow();
   const [selection, setSelection] = useState<{ shapes: string[]; edges: string[] }>({ shapes: [], edges: [] });
@@ -101,7 +104,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo }: Props) 
 
   // Presença: publica a primeira forma selecionada (SPEC-003 §4).
   useEffect(() => {
-    provider.setAwarenessField('selected', selection.shapes[0] ?? null);
+    provider?.setAwarenessField('selected', selection.shapes[0] ?? null);
   }, [provider, selection.shapes]);
 
   const peers = usePeerSelections(provider);
@@ -271,6 +274,8 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo }: Props) 
     try {
       const positions = await autoLayout(diagram);
       if (positions.length > 0) {
+        // Versão de segurança antes de mexer na posição de tudo (PRD-005 §5.2).
+        onCheckpoint?.('Antes de organizar o fluxograma');
         newStep();
         moveShapes(doc, positions, LOCAL_ORIGIN); // uma transação = um Ctrl+Z
       }
@@ -280,7 +285,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo }: Props) 
       setOrganizing(false);
       focusCanvas();
     }
-  }, [doc, canEdit, diagram, newStep, focusCanvas]);
+  }, [doc, canEdit, diagram, newStep, focusCanvas, onCheckpoint]);
 
   // ---------- nós e conectores do React Flow ----------
   const dataCache = useRef(new Map<string, ShapeNodeData>());
@@ -738,10 +743,10 @@ function opposite(handle: HandleSide): HandleSide {
 
 type PeerSelection = Map<string, Array<{ name: string; color: string }>>;
 
-function usePeerSelections(provider: HocuspocusProvider): PeerSelection {
+function usePeerSelections(provider: HocuspocusProvider | null): PeerSelection {
   const [peers, setPeers] = useState<PeerSelection>(new Map());
   useEffect(() => {
-    const awareness = provider.awareness;
+    const awareness = provider?.awareness;
     if (!awareness) return;
     const update = () => {
       const next: PeerSelection = new Map();

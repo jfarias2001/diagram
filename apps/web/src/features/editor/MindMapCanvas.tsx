@@ -40,22 +40,25 @@ const nodeTypes = { mind: MindNode };
 interface Props {
   doc: Y.Doc;
   nodes: NodeRecord;
-  provider: HocuspocusProvider;
+  /** Sem provider (modo versão, SPEC-005 §5.2): sem presença e sem awareness. */
+  provider: HocuspocusProvider | null;
   canEdit: boolean;
   undo: Y.UndoManager | null;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   /** Abre o painel de nota do tópico (SPEC-002 §5.5). */
   onOpenNote: (id: string) => void;
+  /** Guarda uma versão antes de uma operação grande (SPEC-005 §5.3). */
+  onCheckpoint?: (name: string) => void;
 }
 
 type PeerSelection = Map<string, Array<{ name: string; color: string }>>;
 
 /** Seleções dos colegas, pelo awareness do Yjs. */
-function usePeerSelections(provider: HocuspocusProvider): PeerSelection {
+function usePeerSelections(provider: HocuspocusProvider | null): PeerSelection {
   const [peers, setPeers] = useState<PeerSelection>(new Map());
   useEffect(() => {
-    const awareness = provider.awareness;
+    const awareness = provider?.awareness;
     if (!awareness) return;
     const update = () => {
       const next: PeerSelection = new Map();
@@ -77,7 +80,17 @@ function usePeerSelections(provider: HocuspocusProvider): PeerSelection {
   return peers;
 }
 
-export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId, onSelect, onOpenNote }: Props) {
+export function MindMapCanvas({
+  doc,
+  nodes,
+  provider,
+  canEdit,
+  undo,
+  selectedId,
+  onSelect,
+  onOpenNote,
+  onCheckpoint,
+}: Props) {
   const [editing, setEditing] = useState<{ id: string; draft: string | null } | null>(null);
   // Arrasto: posição local + bloco sob o ponteiro (soltar nele troca o pai).
   const [drag, setDrag] = useState<{ id: string; x: number; y: number; target: string | null } | null>(null);
@@ -93,7 +106,7 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
 
   // Seleção publicada para os colegas.
   useEffect(() => {
-    provider.setAwarenessField('selected', selectedId);
+    provider?.setAwarenessField('selected', selectedId);
   }, [provider, selectedId]);
 
   // Se o nó selecionado sumir (apagado por alguém), limpa a seleção.
@@ -347,6 +360,8 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
     // Volta o ramo (ou o mapa, a partir da raiz) ao layout automático — um Ctrl+Z desfaz.
     tidy: (id) => {
       if (!canEdit) return;
+      const root = findRoot(nodes);
+      onCheckpoint?.(id === root?.id ? 'Antes de organizar o mapa' : 'Antes de organizar um ramo');
       newStep();
       clearOffsets(doc, id, LOCAL_ORIGIN);
     },

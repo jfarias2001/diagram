@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aprovado** (2026-09-22) |
+| Status | **Implementado** (2026-09-22) |
 | PRD | [PRD-005](../prd/PRD-005-historico-versoes.md) |
 | Data | 2026-09-22 |
 

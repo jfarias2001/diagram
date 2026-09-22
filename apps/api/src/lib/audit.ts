@@ -17,7 +17,11 @@ export type AuditAction =
   | 'document.purged'
   | 'document.shared'
   | 'document.member_updated'
-  | 'document.unshared';
+  | 'document.unshared'
+  | 'document.version_created'
+  | 'document.version_restored'
+  | 'document.version_deleted'
+  | 'snapshot.pruned';
 
 interface AuditInput {
   action: AuditAction;

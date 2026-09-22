@@ -29,6 +29,12 @@ const envSchema = z.object({
   SEED_ADMIN_NAME: optionalString,
   SEED_ADMIN_PASSWORD: optionalString,
   TRASH_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
+  /** Intervalo entre versões automáticas do documento (SPEC-005 §9). */
+  SNAPSHOT_INTERVAL_MINUTES: z.coerce.number().positive().default(10),
+  /** Idade máxima de uma versão automática. */
+  SNAPSHOT_RETENTION_DAYS: z.coerce.number().int().positive().default(365),
+  /** A partir daqui, guarda só uma versão automática por dia. */
+  SNAPSHOT_DAILY_AFTER_DAYS: z.coerce.number().int().positive().default(30),
   /** Limite global de requisições por IP por minuto. */
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
   /** Tentativas de login por IP por minuto (SPEC-001 §3.1). */

@@ -25,10 +25,44 @@
 
 ## Estado atual (atualize a cada entrada)
 
-- **Fase:** SPEC-001, 002, 003 e **006** implementadas e testadas; ainda não publicadas na VPS. SPEC-005 (versões) e SPEC-004 (pastas) aprovadas, em implementação nesta ordem.
+- **Fase:** SPEC-001, 002, 003, **005** e **006** implementadas e testadas; ainda não publicadas na VPS. Falta implementar a SPEC-004 (pastas).
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** implementar a SPEC-005 (histórico de versões) e depois a SPEC-004 (pastas); em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+- **Próximo passo:** implementar a SPEC-004 (pastas); em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+
+---
+
+## 2026-09-22 — Histórico de versões (SPEC-005)
+**Tipo:** feature
+**Refs:** PRD-005, SPEC-005
+
+**O que mudou**
+- **Tabela `Snapshot`** (migration `add_snapshots`), com o estado do Y.Doc e três tipos: `AUTO`, `NAMED` e `CHECKPOINT`. Apagar o documento de vez apaga o histórico junto; a lixeira não.
+- **Versões automáticas criadas pelo servidor**, dentro do plugin de colaboração: a cada 10 minutos de edição e quando o último editor sai do documento. Não dependem do navegador de ninguém, e guardam quem editou no intervalo.
+- **Restaurar mostra na hora para quem está com o documento aberto.** Em vez de trocar o estado binário (o que quebraria a sincronização), o servidor **reconcilia o Y.Doc vivo** com o da versão: apaga o que sumiu, reescreve o que existe, tudo numa transação. Funciona igual para mapa e fluxograma, porque os dois são mapas planos por id. Antes de restaurar, o estado atual vira um checkpoint "Antes de restaurar de…" — **nada é apagado**.
+- **Rotas** `/documents/:id/versions` (listar, criar, ver conteúdo, restaurar, salvar como cópia, renomear, apagar), com os papéis do PRD §7: leitor e comentador veem e copiam; editor cria e restaura; só o dono renomeia e apaga versão com nome.
+- **Retenção** no mesmo job horário da lixeira: tudo dos últimos 30 dias, uma por dia até 1 ano, nada depois — e tetos de 300 versões e 100 MB por documento, sacrificando só as automáticas.
+- **Painel "Histórico"** no editor (mapa e fluxograma), com data, nome e quem editou. Clicar numa versão entra no **modo versão**: o quadro passa a vir de um Y.Doc local somente leitura, com a faixa "Você está vendo a versão de…" e os botões Restaurar, Salvar como cópia e Voltar ao atual. O documento atual não é tocado enquanto se olha.
+- **Checkpoint antes de organizar** (mapa e fluxograma), disparado sem travar a ação — se o histórico falhar, organizar continua funcionando.
+- **Variáveis novas** no `.env.example` e no `docker-compose.yml`: `SNAPSHOT_INTERVAL_MINUTES`, `SNAPSHOT_RETENTION_DAYS`, `SNAPSHOT_DAILY_AFTER_DAYS`.
+- **Testes:** 257 de unidade e integração (mais 22) e 7 E2E. Entre os novos: reconciliação (ramo que volta, convergência entre dois clientes, fluxograma), matriz de papéis das 7 rotas, IDOR de versão de outro documento, retenção com datas injetadas, **restauração chegando a duas abas conectadas pelo WebSocket**, versão automática criada pelo servidor, e o E2E que salva, apaga, visualiza e restaura.
+
+**Revisão de segurança**
+- Checklist CLAUDE.md §9 revisada no que mudou:
+  - **Autorização:** toda rota passa por `assertDocumentAccess` com o papel da tabela do PRD §7; leitor e comentador recebem 403 em criar e restaurar (teste), não-membro e ADMIN recebem 404 em tudo (teste).
+  - **IDOR:** a versão é sempre buscada com `where: { id, documentId }` — o id de uma versão de outro documento dá 404 (teste).
+  - **Conteúdo do usuário:** `/content` responde `application/octet-stream` com `Content-Disposition: attachment` e `nosniff`; nunca inline.
+  - **Sanitização no restore:** o estado passa pelos leitores defensivos e pelo reparo, então link `javascript:`, cor inválida e coordenada infinita guardados numa versão antiga **não voltam** (teste), e nó órfão volta reanexado.
+  - **Vazamento:** a lista mostra nome de quem editou, nunca e-mail.
+  - **DoS:** versão nunca passa do limite de 5 MB do documento; tetos por documento mais a retenção; rate limit de 20/min em criar e restaurar.
+  - **Falha isolada:** se guardar a versão falhar, a edição e o "Organizar" continuam — o histórico só registra no log.
+- `pnpm audit --prod`: **sem vulnerabilidades** (nenhuma dependência nova).
+
+**Pendências / próximos passos**
+- [ ] O histórico faz o banco crescer; considerar no PRD de backup (SPEC-005 §10).
+- [ ] Restaurar enquanto alguém digita dentro de um bloco sobrescreve o texto ao confirmar (SPEC-005 §10).
+- [ ] Comparar duas versões lado a lado ficou fora (PRD-005 §8).
+- [ ] Implementar a SPEC-004 (pastas).
 
 ---
 

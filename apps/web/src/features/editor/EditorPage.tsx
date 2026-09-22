@@ -1,12 +1,16 @@
-import { type DocumentSummary, findRoot } from '@diagram/shared';
+import { type DocumentSummary, findRoot, type VersionSummary } from '@diagram/shared';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import { useQuery } from '@tanstack/react-query';
 import { ReactFlowProvider } from '@xyflow/react';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
-import type * as Y from 'yjs';
-import { Spinner } from '../../components/ui';
+import * as Y from 'yjs';
+import { ErrorText, Spinner } from '../../components/ui';
 import { api, ApiError } from '../../lib/api';
+import { useCheckpoint } from '../history/checkpoint';
+import { HistoryPanel } from '../history/HistoryPanel';
+import { useVersionPreview } from '../history/useVersionPreview';
+import { VersionBanner } from '../history/VersionBanner';
 import { useBoardTheme } from './boardTheme';
 import { EditorHeader } from './EditorHeader';
 import { MindMapCanvas } from './MindMapCanvas';
@@ -89,34 +93,97 @@ function Editor({
   const board = useBoardTheme();
   const selected = selectedId ? nodes[selectedId] : undefined;
 
+  // Modo versão (SPEC-005 §5.2): o quadro passa a vir de um Y.Doc local.
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [viewing, setViewing] = useState<VersionSummary | null>(null);
+  const { preview, error: previewError } = useVersionPreview(meta.id, viewing);
+  const previewNodes = useMindMapNodes(preview?.doc ?? EMPTY_DOC, false);
+  const checkpoint = useCheckpoint(meta.id, canEdit);
+
   // Tópico apagado (por alguém) com a nota aberta: fecha o painel (SPEC-002 §5.5).
   useEffect(() => {
     if (noteOpen && noteNodeId.current && !nodes[noteNodeId.current]) setNoteOpen(false);
     noteNodeId.current = noteOpen ? (selectedId ?? noteNodeId.current) : null;
   }, [nodes, noteOpen, selectedId]);
 
+  const inPreview = !!viewing;
+
   return (
     <div className="flex h-full flex-col">
-      <EditorHeader meta={meta} state={state} provider={provider} board={board} />
+      <EditorHeader
+        meta={meta}
+        state={state}
+        provider={provider}
+        board={board}
+        historyOpen={historyOpen}
+        onToggleHistory={() => setHistoryOpen((open) => !open)}
+      />
+      {viewing && (
+        <VersionBanner
+          documentId={meta.id}
+          version={viewing}
+          canRestore={canEdit}
+          canSave={state.status === 'saved'}
+          onBack={() => setViewing(null)}
+        />
+      )}
+      <ErrorText error={previewError} />
 
       {/* O tema vale só daqui para dentro (SPEC-006 §5.5). */}
       <div className="relative flex-1" data-board={board.theme}>
-        <MindMapCanvas
-          doc={doc}
-          nodes={nodes}
-          provider={provider}
-          canEdit={canEdit}
-          undo={undo}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onOpenNote={openNote}
-        />
-        <ShortcutHint rows={canEdit ? MIND_SHORTCUTS : [['Setas', 'navegar']]} />
-        {noteOpen && <NotePanel doc={doc} node={selected} canEdit={canEdit} onClose={() => setNoteOpen(false)} />}
+        {inPreview ? (
+          preview ? (
+            // Chave por versão: o canvas recomeça limpo a cada versão aberta.
+            <MindMapCanvas
+              key={preview.version.id}
+              doc={preview.doc}
+              nodes={previewNodes}
+              provider={null}
+              canEdit={false}
+              undo={null}
+              selectedId={null}
+              onSelect={NOOP}
+              onOpenNote={NOOP}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-muted">
+              <Spinner />
+            </div>
+          )
+        ) : (
+          <MindMapCanvas
+            doc={doc}
+            nodes={nodes}
+            provider={provider}
+            canEdit={canEdit}
+            undo={undo}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onOpenNote={openNote}
+            onCheckpoint={checkpoint}
+          />
+        )}
+        <ShortcutHint rows={canEdit && !inPreview ? MIND_SHORTCUTS : [['Setas', 'navegar']]} />
+        {noteOpen && !inPreview && (
+          <NotePanel doc={doc} node={selected} canEdit={canEdit} onClose={() => setNoteOpen(false)} />
+        )}
+        {historyOpen && (
+          <HistoryPanel
+            documentId={meta.id}
+            canEdit={canEdit}
+            viewingId={viewing?.id ?? null}
+            onView={setViewing}
+            onClose={() => setHistoryOpen(false)}
+          />
+        )}
       </div>
     </div>
   );
 }
+
+/** Documento vazio para o hook de preview funcionar antes de a versão chegar. */
+const EMPTY_DOC = new Y.Doc();
+const NOOP = () => {};
 
 const MIND_SHORTCUTS: Array<[string, string]> = [
   ['Tab', 'novo filho'],

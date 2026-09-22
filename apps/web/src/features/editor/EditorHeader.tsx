@@ -21,12 +21,17 @@ export function EditorHeader({
   state,
   provider,
   board,
+  historyOpen,
+  onToggleHistory,
 }: {
   meta: DocumentSummary;
   state: CollabState;
   provider: HocuspocusProvider;
   /** Tema do quadro (SPEC-006 §5.5) — preferência de quem está olhando. */
   board: { theme: BoardTheme; toggle: () => void };
+  /** Painel de histórico (SPEC-005 §5.1), quando o editor o oferece. */
+  historyOpen?: boolean;
+  onToggleHistory?: () => void;
 }) {
   const me = useMe().data;
   const canEdit = !state.readOnly;
@@ -50,6 +55,11 @@ export function EditorHeader({
         <StatusPill status={state.status} readOnly={state.readOnly} />
         <div className="ml-auto flex items-center gap-2">
           <Presence provider={provider} />
+          {onToggleHistory && (
+            <Button aria-pressed={historyOpen} onClick={onToggleHistory}>
+              Histórico
+            </Button>
+          )}
           <BoardThemeToggle theme={board.theme} onToggle={board.toggle} />
           <ExportButton title={meta.title} />
           <Button variant="primary" onClick={() => setSharing(true)}>

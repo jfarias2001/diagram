@@ -7,6 +7,7 @@ import * as Y from 'yjs';
 import type { Env } from '../config/env.js';
 import { resolveSession, sessionCookieName } from '../modules/auth/session.js';
 import { assertDocumentAccess } from '../modules/documents/access.js';
+import { createSnapshot } from '../modules/documents/snapshots.js';
 
 // SPEC-001 §4 — Hocuspocus embutido em /collab.
 
@@ -29,6 +30,8 @@ export interface CollabControl {
   closeDocument(documentId: string): void;
   /** Estado atual em memória, se o documento estiver aberto. */
   liveState(documentId: string): Uint8Array | null;
+  /** Y.Doc em memória, para o servidor escrever nele (restaurar, SPEC-005 §4). */
+  liveDocument(documentId: string): Y.Doc | null;
   instance: Hocuspocus<CollabContext>;
 }
 
@@ -49,11 +52,53 @@ export default fp<{ env: Env }>(async (app, { env }) => {
   const allowedOrigin = new URL(env.APP_URL).origin;
   const socketsPerUser = new Map<string, number>();
 
+  // Versões automáticas (SPEC-005 §4): o servidor guarda uma a cada
+  // SNAPSHOT_INTERVAL e quando o último editor sai. Não depende do navegador.
+  const snapshotInterval = env.SNAPSHOT_INTERVAL_MINUTES * 60 * 1000;
+  interface DocActivity {
+    lastSnapshotAt: number;
+    dirty: boolean;
+    editors: Set<string>;
+  }
+  const activity = new Map<string, DocActivity>();
+  const activityOf = (documentId: string): DocActivity => {
+    let entry = activity.get(documentId);
+    if (!entry) {
+      entry = { lastSnapshotAt: Date.now(), dirty: false, editors: new Set() };
+      activity.set(documentId, entry);
+    }
+    return entry;
+  };
+
+  const saveAutoSnapshot = async (documentId: string, state: Uint8Array, entry: DocActivity) => {
+    const editorIds = [...entry.editors];
+    entry.lastSnapshotAt = Date.now();
+    entry.dirty = false;
+    entry.editors.clear();
+    try {
+      await createSnapshot(app.prisma, { documentId, state, kind: 'AUTO', editorIds });
+    } catch (err) {
+      // Histórico nunca derruba a edição: só registra.
+      app.log.error({ err, documentId }, 'versão automática falhou');
+    }
+  };
+
   const hocuspocus = new Hocuspocus<CollabContext>({
     name: 'diagram',
     quiet: true,
     debounce: 2000,
     maxDebounce: 10000,
+
+    async afterUnloadDocument({ documentName }) {
+      const entry = activity.get(documentName);
+      activity.delete(documentName);
+      if (!entry?.dirty) return;
+      const stored = await app.prisma.document.findUnique({
+        where: { id: documentName },
+        select: { yState: true },
+      });
+      if (stored?.yState) await saveAutoSnapshot(documentName, new Uint8Array(stored.yState), entry);
+    },
 
     // Roda para cada documento aberto no socket, sempre (não depende de token).
     async onConnect({ requestHeaders, documentName, connectionConfig }) {
@@ -114,6 +159,15 @@ export default fp<{ env: Env }>(async (app, { env }) => {
               lastEditedById: (lastContext as CollabContext | undefined)?.userId ?? undefined,
             },
           });
+
+          // SPEC-005 §4: marca a atividade e guarda a versão do intervalo.
+          const entry = activityOf(documentName);
+          entry.dirty = true;
+          const editorId = (lastContext as CollabContext | undefined)?.userId;
+          if (editorId) entry.editors.add(editorId);
+          if (Date.now() - entry.lastSnapshotAt >= snapshotInterval) {
+            await saveAutoSnapshot(documentName, state, entry);
+          }
         },
       }),
     ],
@@ -145,6 +199,9 @@ export default fp<{ env: Env }>(async (app, { env }) => {
     liveState(documentId) {
       const doc = hocuspocus.documents.get(documentId);
       return doc ? Y.encodeStateAsUpdate(doc) : null;
+    },
+    liveDocument(documentId) {
+      return hocuspocus.documents.get(documentId) ?? null;
     },
   };
   app.decorate('collab', control);

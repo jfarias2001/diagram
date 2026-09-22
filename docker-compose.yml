@@ -57,6 +57,10 @@ services:
       # Vazio = qualquer e-mail (os acessos são criados pelo admin — ADR-003).
       ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
       TRASH_RETENTION_DAYS: ${TRASH_RETENTION_DAYS:-30}
+      # Histórico de versões (SPEC-005 §9).
+      SNAPSHOT_INTERVAL_MINUTES: ${SNAPSHOT_INTERVAL_MINUTES:-10}
+      SNAPSHOT_RETENTION_DAYS: ${SNAPSHOT_RETENTION_DAYS:-365}
+      SNAPSHOT_DAILY_AFTER_DAYS: ${SNAPSHOT_DAILY_AFTER_DAYS:-30}
       # Primeiro admin (SPEC-001 §3.2): só é usado se ainda não existir nenhum
       # admin. Depois do 1º login, APAGUE SEED_ADMIN_PASSWORD do .env.
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
