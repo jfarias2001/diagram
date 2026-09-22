@@ -1,15 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
-import { computeTreeRepairs, extractSearchText } from './tree.js';
+import { INK_ON_DARK, INK_ON_LIGHT, readableInk, relativeLuminance } from './document.js';
+import { childrenIndex, computeTreeRepairs, extractSearchText } from './tree.js';
 import {
   addNode,
+  clearOffsets,
   createMindMapDoc,
   decodeDoc,
   deleteBranch,
   encodeDoc,
   moveNode,
+  moveSibling,
+  nodesMap,
   readNodes,
   repairTree,
+  setNodeOffset,
   updateNode,
 } from './ydoc.js';
 
@@ -185,5 +190,131 @@ describe('nota e link no nó (SPEC-002 §2.2)', () => {
     updateNode(doc, 'a', { note: 'segunda' }, LOCAL);
     undo.undo();
     expect(readNodes(doc).a?.note).toBe('primeira');
+  });
+});
+
+// ---------- SPEC-006: posição livre, formato e cor do bloco ----------
+
+describe('posição livre (SPEC-006 §2)', () => {
+  it('grava e apaga o deslocamento manual', () => {
+    const doc = sampleDoc();
+    expect(setNodeOffset(doc, 'a', { dx: 120, dy: -40 })).toBe(true);
+    expect(readNodes(doc).a).toMatchObject({ dx: 120, dy: -40 });
+    expect(setNodeOffset(doc, 'a', null)).toBe(true);
+    expect(readNodes(doc).a!.dx).toBeUndefined();
+  });
+
+  it('recusa deslocamento inválido e o descarta na leitura', () => {
+    const doc = sampleDoc();
+    expect(setNodeOffset(doc, 'a', { dx: Number.POSITIVE_INFINITY, dy: 0 })).toBe(false);
+    expect(setNodeOffset(doc, 'a', { dx: 1e9, dy: 0 })).toBe(false);
+    expect(setNodeOffset(doc, 'fantasma', { dx: 1, dy: 1 })).toBe(false);
+    // dx sem dy (gravado direto no Y.Doc por um cliente adulterado) não vale.
+    nodesMap(doc).get('a')!.set('dx', 10);
+    expect(readNodes(doc).a!.dx).toBeUndefined();
+  });
+
+  it('organizar apaga o deslocamento do ramo inteiro numa transação só', () => {
+    const doc = sampleDoc();
+    setNodeOffset(doc, 'a', { dx: 50, dy: 50 });
+    setNodeOffset(doc, 'a1', { dx: 10, dy: 10 });
+    setNodeOffset(doc, 'b', { dx: 80, dy: 0 });
+
+    let updates = 0;
+    doc.on('update', () => updates++);
+    expect(clearOffsets(doc, 'a')).toBe(2);
+    expect(updates).toBe(1);
+
+    const n = readNodes(doc);
+    expect(n.a!.dx).toBeUndefined();
+    expect(n.a1!.dx).toBeUndefined();
+    expect(n.b!.dx).toBe(80); // outro ramo não é tocado
+    expect(clearOffsets(doc, 'a')).toBe(0);
+  });
+
+  it('organizar a partir da raiz limpa o mapa inteiro', () => {
+    const doc = sampleDoc();
+    setNodeOffset(doc, 'a', { dx: 50, dy: 50 });
+    setNodeOffset(doc, 'b', { dx: 80, dy: 0 });
+    expect(clearOffsets(doc, 'root')).toBe(2);
+    expect(Object.values(readNodes(doc)).every((n) => n.dx === undefined)).toBe(true);
+  });
+});
+
+describe('ordem entre irmãos (SPEC-006 §5.2)', () => {
+  it('sobe e desce um irmão', () => {
+    const doc = sampleDoc();
+    addNode(doc, { id: 'c', parentId: 'root' });
+    const order = () => childrenIndex(readNodes(doc)).get('root')!.map((n) => n.id);
+    expect(order()).toEqual(['a', 'b', 'c']);
+
+    expect(moveSibling(doc, 'c', 'up')).toBe(true);
+    expect(order()).toEqual(['a', 'c', 'b']);
+    expect(moveSibling(doc, 'c', 'up')).toBe(true);
+    expect(order()).toEqual(['c', 'a', 'b']);
+    expect(moveSibling(doc, 'c', 'down')).toBe(true);
+    expect(order()).toEqual(['a', 'c', 'b']);
+  });
+
+  it('recusa nas pontas, na raiz e em nó inexistente', () => {
+    const doc = sampleDoc();
+    expect(moveSibling(doc, 'a', 'up')).toBe(false);
+    expect(moveSibling(doc, 'b', 'down')).toBe(false);
+    expect(moveSibling(doc, 'root', 'up')).toBe(false);
+    expect(moveSibling(doc, 'fantasma', 'up')).toBe(false);
+  });
+});
+
+describe('formato e cor do bloco (SPEC-006 §6)', () => {
+  it('aceita formato e preenchimento válidos e volta ao padrão com ""', () => {
+    const doc = sampleDoc();
+    updateNode(doc, 'a', { shape: 'hexagon', fill: '#d0ebff' });
+    expect(readNodes(doc).a).toMatchObject({ shape: 'hexagon', fill: '#d0ebff' });
+    updateNode(doc, 'a', { shape: '', fill: '' });
+    expect(readNodes(doc).a!.shape).toBeUndefined();
+    expect(readNodes(doc).a!.fill).toBeUndefined();
+  });
+
+  it('descarta formato e cor forjados direto no Y.Doc', () => {
+    const doc = sampleDoc();
+    const y = nodesMap(doc).get('a')!;
+    y.set('shape', '<img src=x onerror=alert(1)>');
+    y.set('fill', 'url(javascript:alert(1))');
+    expect(readNodes(doc).a!.shape).toBeUndefined();
+    expect(readNodes(doc).a!.fill).toBeUndefined();
+
+    y.set('fill', '#fff'); // hex curto também não vale
+    expect(readNodes(doc).a!.fill).toBeUndefined();
+  });
+
+  it('sobrevive à ida e volta pelo encode/decode', () => {
+    const doc = sampleDoc();
+    updateNode(doc, 'a', { shape: 'ellipse', fill: '#1b2230' });
+    setNodeOffset(doc, 'a', { dx: 33, dy: -12 });
+    expect(readNodes(fork(doc)).a).toMatchObject({ shape: 'ellipse', fill: '#1b2230', dx: 33, dy: -12 });
+  });
+});
+
+describe('readableInk (SPEC-006 §5.4)', () => {
+  const contrast = (a: string, b: string) => {
+    const [x, y] = [relativeLuminance(a), relativeLuminance(b)].sort((p, q) => q - p) as [number, number];
+    return (x + 0.05) / (y + 0.05);
+  };
+
+  it('escolhe texto escuro em fundo claro e claro em fundo escuro', () => {
+    expect(readableInk('#ffffff')).toBe(INK_ON_LIGHT);
+    expect(readableInk('#fff3bf')).toBe(INK_ON_LIGHT);
+    expect(readableInk('#1b2230')).toBe(INK_ON_DARK);
+    expect(readableInk('#495057')).toBe(INK_ON_DARK);
+  });
+
+  it('dá contraste AA (4,5:1) em toda a paleta de preenchimento', () => {
+    for (const fill of ['#ffffff', '#fff3bf', '#ffe3e3', '#d3f9d8', '#d0ebff', '#f3d9fa', '#495057', '#1b2230']) {
+      expect(contrast(fill, readableInk(fill))).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('cor inválida não quebra o cálculo', () => {
+    expect(readableInk('nope')).toBe(INK_ON_LIGHT);
   });
 });

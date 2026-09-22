@@ -41,6 +41,45 @@
   }
 }
 
+/*
+ * Tema do quadro (SPEC-006 §5.5). Os mesmos tokens, redefinidos DENTRO do
+ * elemento do quadro: o painel, o cabeçalho e os diálogos continuam seguindo
+ * o sistema. `color-scheme` acerta as barras de rolagem de dentro do quadro.
+ */
+[data-board='light'] {
+  --canvas: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --ink: #1b2230;
+  --muted: #667085;
+  --line: #e3e6eb;
+  --grid: #d5d9e0;
+  --filament: #f2b705;
+  --filament-soft: rgb(242 183 5 / 0.28);
+  --filament-ink: #7a5800;
+  --danger: #c2372b;
+  --ok: #2f8a4c;
+  color-scheme: light;
+  background: var(--canvas);
+}
+
+[data-board='dark'] {
+  --canvas: #12151b;
+  --surface: #1a1f28;
+  --surface-2: #222835;
+  --ink: #e8ebf0;
+  --muted: #97a0af;
+  --line: #2c3340;
+  --grid: #262c37;
+  --filament: #ffc82e;
+  --filament-soft: rgb(255 200 46 / 0.22);
+  --filament-ink: #ffd766;
+  --danger: #ff6b5e;
+  --ok: #5ccf83;
+  color-scheme: dark;
+  background: var(--canvas);
+}
+
 @theme {
   --font-display: 'Bricolage Grotesque Variable', 'Segoe UI', sans-serif;
   --font-sans: 'Instrument Sans Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -86,6 +125,12 @@ body {
   .node-lit {
     transition: box-shadow 160ms ease-out;
   }
+}
+
+/* Bloco sob o ponteiro durante um arrasto: soltar aqui troca o pai (SPEC-006 §5.1). */
+.drop-target {
+  outline: 3px dashed var(--filament);
+  outline-offset: 4px;
 }
 
 .react-flow {

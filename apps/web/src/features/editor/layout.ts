@@ -1,4 +1,4 @@
-import { childrenIndex, findRoot, type MindMapNode } from '@diagram/shared';
+import { childrenIndex, findRoot, type MindMapNode, type NodeShape } from '@diagram/shared';
 import { hierarchy, tree } from 'd3-hierarchy';
 
 export type Side = 'root' | 'left' | 'right';
@@ -28,9 +28,28 @@ const COUSIN_GAP = 26;
 /** Largura de cada ícone de nota/link ao lado do texto (MindNode). */
 export const NODE_ICON_W = 20;
 
-export function estimateSize(text: string, isRoot = false, icons = 0): { width: number; height: number } {
+/**
+ * Folga extra por formato (SPEC-006 §5.4): elipse e hexágono precisam de mais
+ * margem para o texto caber dentro do desenho; o sublinhado não tem caixa.
+ */
+export const SHAPE_PADDING: Record<NodeShape, { x: number; y: number }> = {
+  rounded: { x: 0, y: 0 },
+  rect: { x: 0, y: 0 },
+  capsule: { x: 14, y: 0 },
+  ellipse: { x: 38, y: 18 },
+  hexagon: { x: 30, y: 4 },
+  underline: { x: -8, y: 2 },
+};
+
+export function estimateSize(
+  text: string,
+  isRoot = false,
+  icons = 0,
+  shape: NodeShape = 'rounded',
+): { width: number; height: number } {
   const charW = isRoot ? ROOT_CHAR_W : CHAR_W;
-  const padX = isRoot ? 52 : 32;
+  const extra = SHAPE_PADDING[shape] ?? SHAPE_PADDING.rounded;
+  const padX = (isRoot ? 52 : 32) + extra.x;
   const maxW = isRoot ? ROOT_MAX_W : MAX_W;
   const inner = maxW - padX;
   let lines = 0;
@@ -42,7 +61,7 @@ export function estimateSize(text: string, isRoot = false, icons = 0): { width: 
   }
   return {
     width: Math.max(48, Math.ceil(widest + padX + icons * NODE_ICON_W)),
-    height: lines * (isRoot ? 26 : LINE_H) + (isRoot ? 28 : 16),
+    height: lines * (isRoot ? 26 : LINE_H) + (isRoot ? 28 : 16) + extra.y * 2,
   };
 }
 
@@ -61,16 +80,35 @@ export function layoutMindMap(nodes: Record<string, MindMapNode>): PositionedNod
     let s = size.get(id);
     if (!s) {
       const node = nodes[id];
-      s = estimateSize(node?.text ?? '', id === root.id, (node?.note ? 1 : 0) + (node?.link ? 1 : 0));
+      s = estimateSize(
+        node?.text ?? '',
+        id === root.id,
+        (node?.note ? 1 : 0) + (node?.link ? 1 : 0),
+        node?.shape ?? 'rounded',
+      );
       size.set(id, s);
     }
     return s;
   };
 
-  const build = (node: MindMapNode): TreeItem => ({
-    id: node.id,
-    children: node.collapsed ? [] : (index.get(node.id) ?? []).map(build),
-  });
+  /**
+   * Monta o item da árvore sem recursão: um mapa muito profundo estourava a
+   * pilha de chamadas e derrubava o editor inteiro.
+   */
+  const build = (root: MindMapNode): TreeItem => {
+    const item: TreeItem = { id: root.id, children: [] };
+    const stack: Array<{ node: MindMapNode; item: TreeItem }> = [{ node: root, item }];
+    while (stack.length > 0) {
+      const { node, item: parent } = stack.pop() as { node: MindMapNode; item: TreeItem };
+      if (node.collapsed) continue;
+      for (const child of index.get(node.id) ?? []) {
+        const childItem: TreeItem = { id: child.id, children: [] };
+        parent.children.push(childItem);
+        stack.push({ node: child, item: childItem });
+      }
+    }
+    return item;
+  };
 
   const branches = root.collapsed ? [] : (index.get(root.id) ?? []);
   const splitAt = Math.ceil(branches.length / 2);
@@ -110,6 +148,51 @@ export function layoutMindMap(nodes: Record<string, MindMapNode>): PositionedNod
   }
 
   return result;
+}
+
+/**
+ * Posição final de cada nó (SPEC-006 §2.2):
+ *
+ *   rel(n)    = (dx, dy) manual, ou o delta que o layout automático daria
+ *   pos(raiz) = (dx, dy) da raiz, ou (0, 0)
+ *   pos(n)    = pos(pai) + rel(n)
+ *
+ * Um nó movido à mão arrasta o ramo inteiro sem que nada seja escrito nos
+ * filhos, e um filho novo (sem dx/dy) nasce na posição automática perto do pai.
+ */
+export function resolvePositions(nodes: Record<string, MindMapNode>): PositionedNode[] {
+  const auto = layoutMindMap(nodes);
+  const hasManual = auto.some((p) => nodes[p.id]?.dx !== undefined);
+  if (!hasManual) return auto;
+
+  const autoById = new Map(auto.map((p) => [p.id, p]));
+  const index = childrenIndex(nodes);
+  const root = findRoot(nodes);
+  if (!root) return auto;
+
+  const out: PositionedNode[] = [];
+  const rootNode = nodes[root.id];
+  // Pilha explícita: mapas fundos não podem estourar a pilha de chamadas.
+  const stack: PositionedNode[] = [
+    { id: root.id, x: rootNode?.dx ?? 0, y: rootNode?.dy ?? 0, side: 'root' },
+  ];
+  const seen = new Set<string>();
+  while (stack.length > 0) {
+    const current = stack.pop() as PositionedNode;
+    if (seen.has(current.id)) continue;
+    seen.add(current.id);
+    out.push(current);
+    const parentAuto = autoById.get(current.id);
+    for (const child of index.get(current.id) ?? []) {
+      const childAuto = autoById.get(child.id);
+      if (!childAuto || !parentAuto) continue; // ramo colapsado: não é desenhado
+      const manual = child.dx !== undefined && child.dy !== undefined;
+      const relX = manual ? (child.dx as number) : childAuto.x - parentAuto.x;
+      const relY = manual ? (child.dy as number) : childAuto.y - parentAuto.y;
+      stack.push({ id: child.id, x: current.x + relX, y: current.y + relY, side: childAuto.side });
+    }
+  }
+  return out;
 }
 
 export { branchIds, childrenIndex, isInBranch, orderBetween } from '@diagram/shared';

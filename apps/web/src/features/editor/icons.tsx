@@ -123,3 +123,52 @@ export const IconExternal = (p: IconProps) => (
     <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
   </Svg>
 );
+
+// SPEC-006: organizar, ordem entre irmãos, formato, preenchimento e tema do quadro.
+
+export const IconTidy = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 6h16M4 12h10M4 18h13" />
+  </Svg>
+);
+
+export const IconArrowUp = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 19V5M6 11l6-6 6 6" />
+  </Svg>
+);
+
+export const IconArrowDown = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 5v14M6 13l6 6 6-6" />
+  </Svg>
+);
+
+export const IconShape = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="8" height="7" rx="2" />
+    <circle cx="17" cy="7.5" r="3.5" />
+    <path d="m8 13 5 8H3z" />
+  </Svg>
+);
+
+export const IconPaint = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M11 3 4 10l7 7 7-7z" />
+    <path d="M4 10 11 3" />
+    <path d="M19 15c0 1.7-1 2.8-2 2.8s-2-1.1-2-2.8 2-3.5 2-3.5 2 1.8 2 3.5Z" />
+  </Svg>
+);
+
+export const IconSun = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+  </Svg>
+);
+
+export const IconMoon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+  </Svg>
+);

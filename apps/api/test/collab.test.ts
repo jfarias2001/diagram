@@ -1,4 +1,13 @@
-import { addEdge, addNode, addShape, decodeDoc, readDiagram, readNodes, updateNode } from '@diagram/shared';
+import {
+  addEdge,
+  addNode,
+  addShape,
+  decodeDoc,
+  readDiagram,
+  readNodes,
+  setNodeOffset,
+  updateNode,
+} from '@diagram/shared';
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -182,6 +191,38 @@ describe('WebSocket /collab', () => {
     const stored = await storedNodes(id);
     expect(stored.root?.note).toBeUndefined();
     expect(stored.root?.link).toBeUndefined();
+  });
+
+  it('leitor não move, não pinta e não troca o formato do bloco (SPEC-006 §6)', async () => {
+    const { id, owner, viewer } = await setup();
+    const a = connect(owner.cookie, id);
+    const v = connect(viewer.cookie, id);
+    await waitFor(() => a.state.synced && v.state.synced);
+
+    setNodeOffset(v.doc, 'root', { dx: 400, dy: 400 });
+    updateNode(v.doc, 'root', { shape: 'hexagon', fill: '#1b2230' });
+    await new Promise((r) => setTimeout(r, 800));
+
+    expect(readNodes(a.doc).root?.dx).toBeUndefined();
+    expect(readNodes(a.doc).root?.shape).toBeUndefined();
+    const stored = await storedNodes(id);
+    expect(stored.root?.dx).toBeUndefined();
+    expect(stored.root?.fill).toBeUndefined();
+  });
+
+  it('editor move e pinta o bloco, e o colega recebe (SPEC-006 §4)', async () => {
+    const { id, owner, editor } = await setup();
+    const a = connect(owner.cookie, id);
+    const e = connect(editor.cookie, id);
+    await waitFor(() => a.state.synced && e.state.synced);
+
+    setNodeOffset(e.doc, 'root', { dx: 120, dy: -80 });
+    updateNode(e.doc, 'root', { shape: 'ellipse', fill: '#d0ebff' });
+    await waitFor(() => readNodes(a.doc).root?.dx === 120);
+
+    expect(readNodes(a.doc).root).toMatchObject({ dy: -80, shape: 'ellipse', fill: '#d0ebff' });
+    const stored = await storedNodes(id);
+    expect(stored.root).toMatchObject({ dx: 120, shape: 'ellipse' });
   });
 
   it('fluxograma: editor desenha, colega recebe, busca encontra; leitor forjando é descartado (SPEC-003 §7)', async () => {

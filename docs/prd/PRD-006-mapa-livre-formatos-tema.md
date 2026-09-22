@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aprovado** (2026-09-22) |
+| Status | **Implementado** (2026-09-22) |
 | Autor | Claude (a partir do pedido do usuário) |
 | Data | 2026-09-22 |
 | SPEC | [SPEC-006](../spec/SPEC-006-mapa-livre-formatos-tema.md) |

@@ -1,6 +1,7 @@
 import type { DocumentSummary } from '@diagram/shared';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import type * as Y from 'yjs';
+import { useBoardTheme } from '../editor/boardTheme';
 import { EditorHeader } from '../editor/EditorHeader';
 import { ShortcutHint } from '../editor/ShortcutHint';
 import type { CollabState } from '../editor/useCollab';
@@ -40,11 +41,13 @@ export default function DiagramEditor({
   const canEdit = !state.readOnly;
   const diagram = useDiagram(doc, canEdit);
   const undo = useDiagramUndo(doc);
+  const board = useBoardTheme();
 
   return (
     <div className="flex h-full flex-col">
-      <EditorHeader meta={meta} state={state} provider={provider} />
-      <div className="relative flex-1">
+      <EditorHeader meta={meta} state={state} provider={provider} board={board} />
+      {/* O tema vale só daqui para dentro (SPEC-006 §5.5). */}
+      <div className="relative flex-1" data-board={board.theme}>
         <DiagramCanvas doc={doc} diagram={diagram} provider={provider} canEdit={canEdit} undo={undo} />
         <ShortcutHint rows={canEdit ? SHORTCUTS : READ_ONLY_SHORTCUTS} />
       </div>

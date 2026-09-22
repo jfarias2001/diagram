@@ -25,7 +25,9 @@ export async function exportCanvasPng(nodes: Node[], title: string): Promise<voi
   const width = Math.ceil((bounds.width + PADDING * 2) * scale);
   const height = Math.ceil((bounds.height + PADDING * 2) * scale);
   const view = getViewportForBounds(bounds, width, height, 0.05, 4, PADDING / Math.max(width, height));
-  const background = getComputedStyle(document.body).getPropertyValue('--canvas').trim() || '#ffffff';
+  // Fundo do quadro em uso, não o do resto da interface (SPEC-006 §5.5).
+  const board = viewport.closest<HTMLElement>('[data-board]') ?? document.body;
+  const background = getComputedStyle(board).getPropertyValue('--canvas').trim() || '#ffffff';
 
   const dataUrl = await toPng(viewport, {
     backgroundColor: background,

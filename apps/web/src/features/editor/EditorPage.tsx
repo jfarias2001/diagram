@@ -7,6 +7,7 @@ import { Link, Navigate, useParams } from 'react-router';
 import type * as Y from 'yjs';
 import { Spinner } from '../../components/ui';
 import { api, ApiError } from '../../lib/api';
+import { useBoardTheme } from './boardTheme';
 import { EditorHeader } from './EditorHeader';
 import { MindMapCanvas } from './MindMapCanvas';
 import { NotePanel } from './NotePanel';
@@ -85,6 +86,7 @@ function Editor({
   const openNote = useCallback(() => setNoteOpen(true), []);
   const noteNodeId = useRef<string | null>(null);
 
+  const board = useBoardTheme();
   const selected = selectedId ? nodes[selectedId] : undefined;
 
   // Tópico apagado (por alguém) com a nota aberta: fecha o painel (SPEC-002 §5.5).
@@ -95,9 +97,10 @@ function Editor({
 
   return (
     <div className="flex h-full flex-col">
-      <EditorHeader meta={meta} state={state} provider={provider} />
+      <EditorHeader meta={meta} state={state} provider={provider} board={board} />
 
-      <div className="relative flex-1">
+      {/* O tema vale só daqui para dentro (SPEC-006 §5.5). */}
+      <div className="relative flex-1" data-board={board.theme}>
         <MindMapCanvas
           doc={doc}
           nodes={nodes}
@@ -124,5 +127,6 @@ const MIND_SHORTCUTS: Array<[string, string]> = [
   ['Setas', 'navegar'],
   ['Ctrl+Z / Ctrl+Y', 'desfazer/refazer'],
   ['Ctrl+B', 'negrito'],
-  ['Arrastar', 'mover nó'],
+  ['Arrastar', 'posicionar (ou soltar sobre outro bloco para trocar de pai)'],
+  ['Ctrl+↑ / Ctrl+↓', 'mover entre irmãos'],
 ];

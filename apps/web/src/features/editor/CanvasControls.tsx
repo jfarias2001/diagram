@@ -1,7 +1,7 @@
 import { Panel, useReactFlow } from '@xyflow/react';
 import { type ReactNode, useEffect, useState } from 'react';
 import type * as Y from 'yjs';
-import { IconFit, IconRedo, IconUndo, IconZoomIn, IconZoomOut } from './icons';
+import { IconFit, IconRedo, IconTidy, IconUndo, IconZoomIn, IconZoomOut } from './icons';
 
 // Controles do canto inferior esquerdo (SPEC-002 §5.7). Substituem o <Controls>.
 
@@ -30,11 +30,17 @@ export function CanvasControls({
   undo,
   canEdit,
   onAfter,
+  onTidy,
+  canTidy,
 }: {
   undo: Y.UndoManager | null;
   canEdit: boolean;
   /** Chamado depois de cada ação (devolve o foco ao mapa). */
   onAfter: () => void;
+  /** Volta o mapa inteiro ao layout automático (SPEC-006 §5.3). */
+  onTidy?: () => void;
+  /** Só há o que organizar se algum bloco foi movido à mão. */
+  canTidy?: boolean;
 }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const { canUndo, canRedo } = useUndoState(undo);
@@ -54,6 +60,11 @@ export function CanvasControls({
             <ControlButton label="Refazer (Ctrl+Shift+Z)" disabled={!canRedo} onClick={act(() => undo?.redo())}>
               <IconRedo />
             </ControlButton>
+            {onTidy && (
+              <ControlButton label="Organizar automaticamente" disabled={!canTidy} onClick={act(onTidy)}>
+                <IconTidy />
+              </ControlButton>
+            )}
             <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />
           </>
         )}

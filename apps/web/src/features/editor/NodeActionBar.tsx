@@ -1,20 +1,45 @@
-import { type MindMapNode, normalizeLink } from '@diagram/shared';
+import { type MindMapNode, NODE_SHAPES, type NodeShape, normalizeLink } from '@diagram/shared';
 import { NodeToolbar, Position } from '@xyflow/react';
 import { type ReactNode, useState } from 'react';
 import {
+  IconArrowDown,
+  IconArrowUp,
   IconChild,
   IconCollapse,
   IconExpand,
   IconExternal,
   IconLink,
   IconNote,
+  IconShape,
   IconSibling,
+  IconTidy,
   IconTrash,
 } from './icons';
 
 // Barra flutuante do nó selecionado (SPEC-002 §5.1). Uma só para o mapa inteiro.
 
 export const BRANCH_COLORS = ['#e8590c', '#1c7ed6', '#2f9e44', '#ae3ec9', '#f08c00', '#0c8599', '#d6336c', '#5c7cfa'];
+
+/** Preenchimentos do bloco (SPEC-006 §5.4): claros para quadro claro, escuros para quadro escuro. */
+export const FILL_COLORS = [
+  '#ffffff',
+  '#fff3bf',
+  '#ffe3e3',
+  '#d3f9d8',
+  '#d0ebff',
+  '#f3d9fa',
+  '#495057',
+  '#1b2230',
+];
+
+const SHAPE_LABEL: Record<NodeShape, string> = {
+  rounded: 'Arredondado',
+  capsule: 'Cápsula',
+  rect: 'Retângulo',
+  ellipse: 'Elipse',
+  hexagon: 'Hexágono',
+  underline: 'Sublinhado',
+};
 
 export interface NodeActions {
   createChild: (id: string) => void;
@@ -23,6 +48,13 @@ export interface NodeActions {
   toggleCollapse: (id: string) => void;
   toggleBold: (id: string) => void;
   setColor: (id: string, color: string) => void;
+  /** Preenchimento do bloco; `''` volta ao fundo do quadro (SPEC-006 §5.4). */
+  setFill: (id: string, fill: string) => void;
+  setShape: (id: string, shape: NodeShape | '') => void;
+  /** Troca a ordem com o irmão de cima/de baixo (SPEC-006 §5.2). */
+  reorder: (id: string, direction: 'up' | 'down') => void;
+  /** Volta o ramo ao layout automático (SPEC-006 §5.3). */
+  tidy: (id: string) => void;
   /** Retorna false se o link foi recusado. */
   setLink: (id: string, link: string) => boolean;
   openNote: (id: string) => void;
@@ -34,12 +66,16 @@ interface Props {
   node: MindMapNode;
   canEdit: boolean;
   hasChildren: boolean;
+  /** Quantos irmãos há (com o próprio): com 1, não há o que reordenar. */
+  siblingCount: number;
+  /** Algum bloco do ramo foi movido à mão — só então "Organizar este ramo" faz algo. */
+  branchMoved: boolean;
   actions: NodeActions;
 }
 
-type Popover = 'color' | 'link' | null;
+type Popover = 'color' | 'link' | 'shape' | null;
 
-export function NodeActionBar({ node, canEdit, hasChildren, actions }: Props) {
+export function NodeActionBar({ node, canEdit, hasChildren, siblingCount, branchMoved, actions }: Props) {
   const [popover, setPopover] = useState<Popover>(null);
   const isRoot = node.parentId === null;
   const toggle = (p: Exclude<Popover, null>) => setPopover((cur) => (cur === p ? null : p));
@@ -82,13 +118,38 @@ export function NodeActionBar({ node, canEdit, hasChildren, actions }: Props) {
                 </BarButton>
               )}
               <Divider />
-              <BarButton label="Cor" pressed={popover === 'color'} onClick={() => toggle('color')}>
-                <span className="h-4 w-4 rounded-full border border-line" style={{ background: node.color ?? 'conic-gradient(#e8590c, #1c7ed6, #2f9e44, #ae3ec9, #e8590c)' }} />
+              <BarButton label="Cores" pressed={popover === 'color'} onClick={() => toggle('color')}>
+                <span
+                  className="h-4 w-4 rounded-full border border-line"
+                  style={{
+                    background:
+                      node.fill ?? node.color ?? 'conic-gradient(#e8590c, #1c7ed6, #2f9e44, #ae3ec9, #e8590c)',
+                    borderColor: node.color,
+                  }}
+                />
+              </BarButton>
+              <BarButton label="Formato do bloco" pressed={popover === 'shape'} onClick={() => toggle('shape')}>
+                <IconShape />
               </BarButton>
               <BarButton label="Negrito" shortcut="Ctrl+B" pressed={!!node.bold} onClick={run(actions.toggleBold)}>
                 <span className="w-4 text-sm font-bold">B</span>
               </BarButton>
             </>
+          )}
+          {canEdit && !isRoot && siblingCount > 1 && (
+            <>
+              <BarButton label="Mover para cima" shortcut="Ctrl+↑" onClick={() => actions.reorder(node.id, 'up')}>
+                <IconArrowUp />
+              </BarButton>
+              <BarButton label="Mover para baixo" shortcut="Ctrl+↓" onClick={() => actions.reorder(node.id, 'down')}>
+                <IconArrowDown />
+              </BarButton>
+            </>
+          )}
+          {canEdit && branchMoved && (
+            <BarButton label="Organizar este ramo" onClick={run(actions.tidy)}>
+              <IconTidy />
+            </BarButton>
           )}
           {(canEdit || node.note) && (
             <BarButton label={node.note ? 'Ver nota' : 'Adicionar nota'} pressed={false} onClick={() => actions.openNote(node.id)}>
@@ -135,9 +196,16 @@ export function NodeActionBar({ node, canEdit, hasChildren, actions }: Props) {
 
         {popover === 'color' && canEdit && (
           <ColorPicker
-            current={node.color}
-            onPick={(color) => {
-              actions.setColor(node.id, color);
+            node={node}
+            onPickOutline={(color) => actions.setColor(node.id, color)}
+            onPickFill={(fill) => actions.setFill(node.id, fill)}
+          />
+        )}
+        {popover === 'shape' && canEdit && (
+          <ShapePicker
+            current={node.shape ?? 'rounded'}
+            onPick={(shape) => {
+              actions.setShape(node.id, shape);
               setPopover(null);
               actions.focusCanvas();
             }}
@@ -197,17 +265,60 @@ function Divider() {
   return <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />;
 }
 
-function ColorPicker({ current, onPick }: { current: string | undefined; onPick: (color: string) => void }) {
+/** Contorno (cor do ramo) e preenchimento do bloco, no mesmo popover (SPEC-006 §5.4). */
+function ColorPicker({
+  node,
+  onPickOutline,
+  onPickFill,
+}: {
+  node: MindMapNode;
+  onPickOutline: (color: string) => void;
+  onPickFill: (fill: string) => void;
+}) {
   return (
-    <div className="flex items-center gap-1.5 rounded-xl border border-line bg-surface p-1.5 shadow-md" role="group" aria-label="Cores">
-      {BRANCH_COLORS.map((color) => (
+    <div className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-2 shadow-md">
+      <Swatches
+        label="Contorno"
+        colors={BRANCH_COLORS}
+        current={node.color}
+        autoTitle="Voltar à cor do ramo"
+        onPick={onPickOutline}
+      />
+      <Swatches
+        label="Preenchimento"
+        colors={FILL_COLORS}
+        current={node.fill}
+        autoTitle="Voltar ao fundo do quadro"
+        onPick={onPickFill}
+      />
+    </div>
+  );
+}
+
+function Swatches({
+  label,
+  colors,
+  current,
+  autoTitle,
+  onPick,
+}: {
+  label: string;
+  colors: string[];
+  current: string | undefined;
+  autoTitle: string;
+  onPick: (color: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5" role="group" aria-label={label}>
+      <span className="w-24 text-xs text-muted">{label}</span>
+      {colors.map((color) => (
         <button
           key={color}
           type="button"
-          aria-label={`Cor ${color}`}
+          aria-label={`${label} ${color}`}
           aria-pressed={current === color}
           onClick={() => onPick(color)}
-          className={`h-5 w-5 rounded-full transition ${current === color ? 'ring-2 ring-ink ring-offset-2 ring-offset-surface' : 'hover:scale-110'}`}
+          className={`h-5 w-5 rounded-full border border-line transition ${current === color ? 'ring-2 ring-ink ring-offset-2 ring-offset-surface' : 'hover:scale-110'}`}
           style={{ background: color }}
         />
       ))}
@@ -215,11 +326,48 @@ function ColorPicker({ current, onPick }: { current: string | undefined; onPick:
         type="button"
         onClick={() => onPick('')}
         className="rounded-md px-1.5 text-xs text-muted hover:bg-surface-2 hover:text-ink"
-        title="Voltar à cor do ramo"
+        title={autoTitle}
       >
         Auto
       </button>
     </div>
+  );
+}
+
+/** Miniatura de cada formato (SPEC-006 §5.4). */
+function ShapePicker({ current, onPick }: { current: NodeShape; onPick: (shape: NodeShape) => void }) {
+  return (
+    <div className="flex items-center gap-1 rounded-xl border border-line bg-surface p-1.5 shadow-md" role="group" aria-label="Formato do bloco">
+      {NODE_SHAPES.map((shape) => (
+        <button
+          key={shape}
+          type="button"
+          title={SHAPE_LABEL[shape]}
+          aria-label={SHAPE_LABEL[shape]}
+          aria-pressed={current === shape}
+          onClick={() => onPick(shape)}
+          className={`flex h-9 w-11 items-center justify-center rounded-lg transition ${
+            current === shape ? 'bg-surface-2 text-ink' : 'text-muted hover:bg-surface-2 hover:text-ink'
+          }`}
+        >
+          <ShapeThumb shape={shape} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ShapeThumb({ shape }: { shape: NodeShape }) {
+  const common = { fill: 'none', stroke: 'currentColor', strokeWidth: 2 };
+  return (
+    <svg width={28} height={18} viewBox="0 0 40 24" aria-hidden>
+      {shape === 'rounded' && <rect x="2" y="3" width="36" height="18" rx="6" {...common} />}
+      {shape === 'rect' && <rect x="2" y="3" width="36" height="18" rx="1" {...common} />}
+      {shape === 'capsule' && <rect x="2" y="3" width="36" height="18" rx="9" {...common} />}
+      {shape === 'ellipse' && <ellipse cx="20" cy="12" rx="18" ry="9" {...common} />}
+      {shape === 'hexagon' && <polygon points="9,3 31,3 38,12 31,21 9,21 2,12" {...common} />}
+      {shape === 'underline' && <path d="M4 18h32" {...common} />}
+    </svg>
   );
 }
 

@@ -25,10 +25,41 @@
 
 ## Estado atual (atualize a cada entrada)
 
-- **Fase:** MVP (SPEC-001), mapa com o mouse (SPEC-002) e **fluxogramas (SPEC-003)** implementados e testados; ainda não publicados na VPS. PRDs 004, 005 e 006 aprovados; **SPEC-004, SPEC-005 e SPEC-006 escritas, aguardando aprovação**.
+- **Fase:** SPEC-001, 002, 003 e **006** implementadas e testadas; ainda não publicadas na VPS. SPEC-005 (versões) e SPEC-004 (pastas) aprovadas, em implementação nesta ordem.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** aprovação das SPECs 004–006 e escolha da ordem de implementação; em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+- **Próximo passo:** implementar a SPEC-005 (histórico de versões) e depois a SPEC-004 (pastas); em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+
+---
+
+## 2026-09-22 — Mapa livre, formatos e cores de bloco, tema do quadro (SPEC-006)
+**Tipo:** feature, fix
+**Refs:** PRD-006, SPEC-006
+
+**O que mudou**
+- **Posição livre no mapa mental.** Cada bloco pode ter um deslocamento `dx`/`dy` **relativo ao pai**. Arrastar um bloco e soltar no vazio o deixa onde foi solto e o ramo inteiro vai junto — com **uma escrita só** no Yjs, mesmo num ramo de 1.000 blocos (teste). Soltar em cima de outro bloco continua trocando o pai (o bloco alvo fica destacado enquanto se arrasta) e devolve o bloco à posição automática. A raiz também arrasta, e arrastá-la move o mapa inteiro. Um filho criado depois nasce na posição automática perto do pai, mesmo com o pai movido.
+- **Organizar automaticamente:** botão nos controles (mapa inteiro) e na barra do bloco (só o ramo). É uma transação só, então um Ctrl+Z desfaz.
+- **Ordem entre irmãos** saiu do arrasto e foi para `Ctrl+↑`/`Ctrl+↓` e dois botões na barra.
+- **Formato do bloco:** arredondado, cápsula, retângulo, elipse, hexágono e sublinhado. Elipse e hexágono são desenhados em SVG atrás do texto (borda e preenchimento que `clip-path` não faria), e o layout reserva a folga extra de cada formato.
+- **Cor de preenchimento do bloco**, com o texto escolhendo sozinho entre escuro e claro (`readableInk`, luminância WCAG) — toda a paleta tem contraste ≥ 4,5:1 (teste).
+- **Tema do quadro (claro/escuro)** num interruptor sol/lua no cabeçalho: redefine os tokens **dentro** do quadro, então o painel e os diálogos continuam seguindo o sistema. A escolha fica no `localStorage`, vale nos dois editores, e o PNG exportado sai com o fundo do quadro em uso.
+- **Correção encontrada pelos testes (não era da SPEC):** `layoutMindMap` montava a árvore recursivamente e **estourava a pilha** num mapa muito profundo, derrubando o editor; a mesma coisa acontecia no cálculo das cores do ramo. Os dois viraram laços com pilha explícita — um mapa em cadeia de 5.000 níveis agora desenha (teste).
+- **Sem migration, sem rota nova e sem dependência nova:** tudo são campos aditivos do documento Yjs mais uma preferência de navegador.
+- **Testes:** 235 de unidade e integração (mais 17) e 6 E2E. Entre os novos: deslocamento inválido descartado, organizar em uma transação, ordem entre irmãos, formato/cor forjados, `readableInk` na paleta inteira, `resolvePositions` (ramo junto, raiz, filho novo, mapa profundo), desempenho com 1.000 blocos e o E2E que arrasta, organiza, desfaz, pinta e troca o tema.
+
+**Revisão de segurança**
+- Checklist CLAUDE.md §9 revisada no que mudou:
+  - **Autorização:** nenhuma regra nova. Teste novo pelo WebSocket: leitor que forja `dx`/`dy`, `shape` e `fill` tem o update **descartado no servidor**; editor grava e o colega recebe.
+  - **Injeção de CSS:** `fill` só entra se casar com `#rrggbb` e `shape` só se estiver na lista — validado na **leitura** do Y.Doc, não só na escrita (teste com `url(javascript:…)` e com tag HTML no campo `shape`).
+  - **XSS:** nenhum `dangerouslySetInnerHTML`; o SVG dos formatos é gerado por nós, com atributos literais — nada do usuário vira marcação.
+  - **Coordenadas:** `dx`/`dy` só valem juntos, finitos e dentro de ±20.000 (NaN, Infinity e valores absurdos descartados na leitura e na escrita).
+  - **Preferência local:** o `localStorage` guarda só `light`/`dark`, com validação na leitura e `try/catch` (navegador com storage bloqueado não quebra o editor).
+- `pnpm audit --prod`: **sem vulnerabilidades** (nenhuma dependência nova).
+
+**Pendências / próximos passos**
+- [ ] Arrastar um ramo para o outro lado da raiz não troca o lado lógico do ramo (as ligações continuam saindo pelo lado original) — SPEC-006 §10.
+- [ ] Blocos movidos à mão podem se sobrepor; "Organizar" resolve — é o preço da posição livre.
+- [ ] Implementar a SPEC-005 e, nela, criar o checkpoint de versão antes de "Organizar" (SPEC-005 §8, tarefa 8).
 
 ---
 

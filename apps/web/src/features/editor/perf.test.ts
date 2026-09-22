@@ -1,6 +1,6 @@
-import { addNode, createMindMapDoc, readNodes, updateNode } from '@diagram/shared';
+import { addNode, createMindMapDoc, readNodes, setNodeOffset, updateNode } from '@diagram/shared';
 import { describe, expect, it } from 'vitest';
-import { layoutMindMap } from './layout';
+import { layoutMindMap, resolvePositions } from './layout';
 
 // SPEC-001 §7 — orçamento de desempenho: 1.000+ nós sem travar a digitação.
 // Cada tecla digitada num nó dispara readNodes + layout; os dois juntos
@@ -35,5 +35,34 @@ describe('desempenho com 1.000 nós', () => {
     runs.sort((a, b) => a - b);
     const median = runs[Math.floor(runs.length / 2)]!;
     expect(median).toBeLessThan(50);
+  });
+});
+
+// SPEC-006 §7: posição livre não pode custar o orçamento do layout.
+describe('desempenho com posições manuais', () => {
+  it('resolver 1.000 nós com deslocamento manual leva menos de 50 ms', () => {
+    const doc = bigMap(1000);
+    // Um em cada dez blocos movido à mão — bem mais do que o uso real.
+    for (let i = 0; i < 1000; i += 10) setNodeOffset(doc, `n${i}`, { dx: i % 300, dy: (i % 7) * 30 });
+    resolvePositions(readNodes(doc));
+
+    const runs: number[] = [];
+    for (let i = 0; i < 10; i++) {
+      setNodeOffset(doc, 'n500', { dx: 100 + i, dy: 50 });
+      const start = performance.now();
+      const positioned = resolvePositions(readNodes(doc));
+      runs.push(performance.now() - start);
+      expect(positioned).toHaveLength(1001);
+    }
+    runs.sort((a, b) => a - b);
+    expect(runs[Math.floor(runs.length / 2)]!).toBeLessThan(50);
+  });
+
+  it('um arrasto grava uma vez só, mesmo num ramo de 1.000 nós', () => {
+    const doc = bigMap(1000);
+    let updates = 0;
+    doc.on('update', () => updates++);
+    setNodeOffset(doc, 'n0', { dx: 250, dy: 120 });
+    expect(updates).toBe(1);
   });
 });

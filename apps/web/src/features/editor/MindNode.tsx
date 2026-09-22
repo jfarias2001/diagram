@@ -1,13 +1,21 @@
-import { NODE_TEXT_MAX } from '@diagram/shared';
+import { NODE_TEXT_MAX, type NodeShape } from '@diagram/shared';
 import { Handle, type Node, type NodeProps, Position } from '@xyflow/react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { IconLink, IconNote, IconPlus } from './icons';
-import type { Side } from './layout';
+import { SHAPE_PADDING, type Side } from './layout';
 
 export type MindNodeData = {
   text: string;
   side: Side;
   color: string;
+  /** Formato do bloco (SPEC-006 §5.4). */
+  shape: NodeShape;
+  /** Preenchimento escolhido, ou null = fundo do quadro. */
+  fill: string | null;
+  /** Cor do texto com contraste sobre o preenchimento, ou null = tinta do quadro. */
+  ink: string | null;
+  /** Bloco sob o ponteiro durante um arrasto: soltar aqui troca o pai. */
+  dropTarget: boolean;
   bold: boolean;
   hasHiddenChildren: boolean;
   editing: boolean;
@@ -68,27 +76,81 @@ function AddChildButton({ id, side, color, selected, onAdd }: {
   );
 }
 
+/** Formatos desenhados em SVG: borda e preenchimento que o CSS não faz. */
+const SVG_SHAPES = new Set<NodeShape>(['ellipse', 'hexagon']);
+
+/** Caixa do formato feita com CSS (SPEC-006 §5.4). */
+const CSS_SHAPE_CLASS: Record<NodeShape, string> = {
+  rounded: 'rounded-xl border-2',
+  rect: 'rounded-[3px] border-2',
+  capsule: 'rounded-full border-2',
+  underline: 'rounded-none border-0 border-b-2',
+  ellipse: 'border-0',
+  hexagon: 'border-0',
+};
+
+/** Fundo do formato, atrás do texto. `preserveAspectRatio="none"` estica ao bloco. */
+function ShapeBackground({ shape, fill, stroke, lit }: { shape: NodeShape; fill: string; stroke: string; lit: boolean }) {
+  const common = { fill, stroke, strokeWidth: lit ? 4 : 2.5, vectorEffect: 'non-scaling-stroke' as const };
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      style={lit ? { filter: 'drop-shadow(0 0 6px var(--filament))' } : undefined}
+    >
+      {shape === 'ellipse' ? (
+        <ellipse cx="50" cy="50" rx="49" ry="48" {...common} />
+      ) : (
+        <polygon points="18,2 82,2 99,50 82,98 18,98 1,50" {...common} />
+      )}
+    </svg>
+  );
+}
+
 function MindNodeComponent({ id, data, selected }: NodeProps<MindFlowNode>) {
   const isRoot = data.side === 'root';
   const peer = data.peers[0];
   const canAdd = data.canEdit && !data.editing;
+  const shape = data.shape;
+  const drawn = SVG_SHAPES.has(shape);
+  const extra = SHAPE_PADDING[shape] ?? SHAPE_PADDING.rounded;
 
   return (
     <div
       className={[
-        'group relative rounded-xl border-2 bg-surface text-ink',
+        'group relative text-ink',
+        CSS_SHAPE_CLASS[shape],
+        data.fill || drawn ? '' : 'bg-surface',
         isRoot ? 'px-6 py-3 font-display text-lg font-semibold' : 'px-3.5 py-1.5 text-sm',
         data.bold ? 'font-bold' : '',
-        selected ? 'node-lit' : '',
+        selected && !drawn ? 'node-lit' : '',
+        data.dropTarget ? 'drop-target' : '',
       ].join(' ')}
       style={{
         borderColor: data.color,
-        maxWidth: isRoot ? 320 : 260,
-        minWidth: 48,
+        maxWidth: (isRoot ? 320 : 260) + extra.x,
+        minWidth: 48 + extra.x,
+        paddingLeft: `calc(${isRoot ? '1.5rem' : '0.875rem'} + ${extra.x / 2}px)`,
+        paddingRight: `calc(${isRoot ? '1.5rem' : '0.875rem'} + ${extra.x / 2}px)`,
+        paddingTop: `calc(${isRoot ? '0.75rem' : '0.375rem'} + ${extra.y}px)`,
+        paddingBottom: `calc(${isRoot ? '0.75rem' : '0.375rem'} + ${extra.y}px)`,
+        // Cor validada na leitura do Y.Doc: só #rrggbb chega aqui (SPEC-006 §6).
+        ...(data.fill && !drawn ? { background: data.fill } : {}),
+        ...(data.ink ? { color: data.ink } : {}),
         ...(peer && !selected ? { outline: `2px dashed ${peer.color}`, outlineOffset: 3 } : {}),
       }}
     >
-      <div className="flex items-start gap-1.5">
+      {drawn && (
+        <ShapeBackground
+          shape={shape}
+          fill={data.fill ?? 'var(--surface)'}
+          stroke={data.color}
+          lit={!!selected}
+        />
+      )}
+      <div className="relative flex items-start gap-1.5">
         {/* Texto sempre renderizado como texto — nunca HTML (CLAUDE.md §9). */}
         {data.editing ? (
           <NodeEditor

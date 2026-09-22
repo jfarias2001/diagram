@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Rascunho |
+| Status | **Implementado** (2026-09-22) |
 | PRD | [PRD-006](../prd/PRD-006-mapa-livre-formatos-tema.md) |
 | Data | 2026-09-22 |
 
@@ -122,7 +122,7 @@ Nenhuma rota nova nem alterada. O conteúdo viaja pelo Yjs.
 - O elemento que envolve o `ReactFlow` recebe `data-board="light"` ou `"dark"`. No `index.css`, um bloco redefine dentro dele os tokens que o quadro usa (`--canvas`, `--surface`, `--surface-2`, `--ink`, `--muted`, `--line`, `--grid`) — ou seja, os blocos, as barras flutuantes de dentro do quadro e a grade acompanham, e **o painel, o cabeçalho e os diálogos não** (PRD §5.14).
 - Interruptor sol/lua no `EditorHeader`, `aria-label="Mudar o quadro para o modo claro/escuro"` e `aria-pressed`, visível para todos os papéis.
 - `exportPng.ts` passa a ler `--canvas` do elemento do quadro (hoje lê do `body`) — o PNG sai com o fundo do quadro em uso (PRD §5.18).
-- Vale para o `DiagramEditor` também (PRD §5.16). As cores fixas das formas do fluxograma (`DEFAULT_FILL`, `SHAPE_INK`, SPEC-003 §5.3) **continuam fixas** — são conteúdo do documento, não tema; o que muda é o fundo do quadro e a grade. Formas sem `fill` explícito passam a usar o tom do quadro, pelo mesmo caminho dos blocos do mapa.
+- Vale para o `DiagramEditor` também (PRD §5.16): fundo do quadro, grade, barras flutuantes e paleta acompanham o tema. As cores das **formas** do fluxograma (`DEFAULT_FILL`, `SHAPE_INK`, SPEC-003 §5.3) **continuam fixas** — são conteúdo do documento, e quem quiser contraste troca o preenchimento pela paleta que já existe desde a SPEC-003. No mapa mental é diferente: um bloco **sem** `fill` usa o tom do quadro (por isso a cor de preenchimento do PRD §5.12 existe, para os casos em que se quer fugir dele).
 
 ### 5.6 Desempenho
 - `resolvePositions` é memoizado sobre `nodes` (como o `layoutMindMap` hoje) e o arrasto continua fora do React Flow (estado local + `zIndex`), sem tocar no Yjs até soltar.

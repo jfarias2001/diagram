@@ -1,6 +1,6 @@
 import type { MindMapNode } from '@diagram/shared';
 import { describe, expect, it } from 'vitest';
-import { branchIds, estimateSize, isInBranch, layoutMindMap, orderBetween } from './layout';
+import { branchIds, estimateSize, isInBranch, layoutMindMap, orderBetween, resolvePositions } from './layout';
 
 function map(...list: Array<[string, string | null, number]>): Record<string, MindMapNode> {
   return Object.fromEntries(list.map(([id, parentId, order]) => [id, { id, parentId, order, text: id }]));
@@ -64,5 +64,70 @@ describe('layout sem sobreposição', () => {
     nodes.a!.text = 'um ramo com um título bastante longo';
     const pos = Object.fromEntries(layoutMindMap(nodes).map((p) => [p.id, p]));
     expect(pos.a1!.x).toBeGreaterThanOrEqual(pos.a!.x + estimateSize(nodes.a!.text).width);
+  });
+});
+
+// ---------- SPEC-006 §2.2: posições resolvidas (automático + manual) ----------
+
+describe('resolvePositions', () => {
+  it('sem deslocamento manual, é exatamente o layout automático', () => {
+    expect(resolvePositions(sample)).toEqual(layoutMindMap(sample));
+  });
+
+  it('desloca o nó movido e leva o ramo junto, sem mexer nos outros', () => {
+    const auto = Object.fromEntries(layoutMindMap(sample).map((p) => [p.id, p]));
+    const moved = { ...sample, a: { ...sample.a!, dx: 400, dy: 250 } };
+    const byId = Object.fromEntries(resolvePositions(moved).map((p) => [p.id, p]));
+
+    // 'a' fica onde foi solto (relativo à raiz, que está em 0,0).
+    expect(byId.a).toMatchObject({ x: 400, y: 250 });
+    // o filho mantém o desenho relativo ao pai.
+    const relX = (auto.a1?.x ?? 0) - (auto.a?.x ?? 0);
+    const relY = (auto.a1?.y ?? 0) - (auto.a?.y ?? 0);
+    expect(byId.a1?.x).toBeCloseTo(400 + relX);
+    expect(byId.a1?.y).toBeCloseTo(250 + relY);
+    // irmãos não movidos continuam onde estavam.
+    expect(byId.b).toMatchObject({ x: auto.b?.x, y: auto.b?.y });
+  });
+
+  it('mover a raiz move o mapa inteiro', () => {
+    const auto = Object.fromEntries(layoutMindMap(sample).map((p) => [p.id, p]));
+    const moved = { ...sample, root: { ...sample.root!, dx: -100, dy: 60 } };
+    const byId = Object.fromEntries(resolvePositions(moved).map((p) => [p.id, p]));
+    expect(byId.root).toMatchObject({ x: -100, y: 60 });
+    expect(byId.b?.x).toBeCloseTo((auto.b?.x ?? 0) - 100);
+    expect(byId.b?.y).toBeCloseTo((auto.b?.y ?? 0) + 60);
+  });
+
+  it('filho novo de um pai movido nasce perto do pai', () => {
+    const moved = {
+      ...sample,
+      a: { ...sample.a!, dx: 500, dy: 500 },
+      novo: { id: 'novo', parentId: 'a', order: 2, text: 'Novo' },
+    };
+    const byId = Object.fromEntries(resolvePositions(moved).map((p) => [p.id, p]));
+    const dist = Math.hypot((byId.novo?.x ?? 0) - 500, (byId.novo?.y ?? 0) - 500);
+    expect(dist).toBeLessThan(400);
+  });
+
+  it('não desenha filhos de ramo colapsado nem estoura a pilha em mapa fundo', () => {
+    const collapsed = { ...sample, a: { ...sample.a!, collapsed: true, dx: 10, dy: 10 } };
+    expect(resolvePositions(collapsed).map((p) => p.id)).not.toContain('a1');
+
+    const deep: Record<string, MindMapNode> = { root: { id: 'root', parentId: null, order: 0, text: 'r' } };
+    for (let i = 0; i < 5000; i++) {
+      deep[`n${i}`] = { id: `n${i}`, parentId: i === 0 ? 'root' : `n${i - 1}`, order: 1, text: 'x' };
+    }
+    deep.n0 = { ...deep.n0!, dx: 20, dy: 20 };
+    expect(resolvePositions(deep)).toHaveLength(5001);
+  });
+});
+
+describe('estimateSize por formato (SPEC-006 §5.4)', () => {
+  it('elipse e hexágono pedem mais espaço que o arredondado', () => {
+    const base = estimateSize('Um tópico qualquer');
+    expect(estimateSize('Um tópico qualquer', false, 0, 'ellipse').width).toBeGreaterThan(base.width);
+    expect(estimateSize('Um tópico qualquer', false, 0, 'hexagon').width).toBeGreaterThan(base.width);
+    expect(estimateSize('Um tópico qualquer', false, 0, 'ellipse').height).toBeGreaterThan(base.height);
   });
 });
