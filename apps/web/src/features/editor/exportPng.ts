@@ -12,11 +12,11 @@ export function safeFileName(title: string): string {
     .trim()
     .replace(/\s+/g, ' ')
     .slice(0, 80);
-  return `${cleaned || 'mapa'}.png`;
+  return `${cleaned || 'documento'}.png`;
 }
 
-/** Exporta o mapa inteiro (não só o que está na tela) como PNG. */
-export async function exportMindMapPng(nodes: Node[], title: string): Promise<void> {
+/** Exporta o documento inteiro (não só o que está na tela) como PNG — mapa ou fluxograma. */
+export async function exportCanvasPng(nodes: Node[], title: string): Promise<void> {
   const viewport = document.querySelector<HTMLElement>('.react-flow__viewport');
   if (!viewport || nodes.length === 0) return;
 

@@ -25,14 +25,14 @@ async function choosePassword(page: Page, current: string, next: string) {
   await page.getByLabel('Nova senha', { exact: true }).fill(next);
   await page.getByLabel('Confirme a nova senha').fill(next);
   await page.getByRole('button', { name: 'Salvar nova senha' }).click();
-  await expect(page.getByRole('heading', { name: 'Mapas' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Documentos' })).toBeVisible();
 }
 
 /** Admin do stack; funciona rodando antes ou depois do mvp.spec (que troca a senha). */
 async function loginAdmin(page: Page) {
   await login(page, 'admin@paglamp.com.br', 'nova senha do admin');
   const ok = await page
-    .getByRole('heading', { name: 'Mapas' })
+    .getByRole('heading', { name: 'Documentos' })
     .waitFor({ timeout: 4000 })
     .then(() => true)
     .catch(() => false);
@@ -59,8 +59,9 @@ test('mapa só com o mouse: barra, "+", duplo clique, nota e link; leitor só l�
   await admin.getByRole('button', { name: 'Pronto' }).click();
 
   // Mapa novo.
-  await admin.getByRole('link', { name: 'Mapas' }).click();
-  await admin.getByRole('button', { name: '+ Novo mapa' }).click();
+  await admin.getByRole('link', { name: 'Documentos' }).click();
+  await admin.getByRole('button', { name: '+ Novo' }).click();
+  await admin.getByRole('menuitem', { name: /Mapa mental/ }).click();
   await admin.getByLabel('Título').fill('Compras pelo mouse');
   await admin.getByRole('button', { name: 'Criar mapa' }).click();
   await expect(admin.getByText('Salvo')).toBeVisible();
@@ -172,7 +173,7 @@ test('mapa só com o mouse: barra, "+", duplo clique, nota e link; leitor só l�
   await shot(bia, '11-leitora-nota');
 
   // 9) Busca do painel encontra pela nota.
-  await admin.getByRole('link', { name: 'Voltar para os mapas' }).click();
-  await admin.getByLabel('Buscar mapas').fill('zebraquinta');
+  await admin.getByRole('link', { name: 'Voltar para os documentos' }).click();
+  await admin.getByLabel('Buscar documentos').fill('zebraquinta');
   await expect(admin.getByRole('link', { name: /Compras pelo mouse/ })).toBeVisible();
 });

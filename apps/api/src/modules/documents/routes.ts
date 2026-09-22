@@ -1,4 +1,5 @@
 import {
+  createDiagramDoc,
   createDocumentBodySchema,
   createMindMapDoc,
   type DocumentList,
@@ -36,13 +37,14 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/documents', async (request): Promise<DocumentList> => {
     const user = currentUser(request);
-    const { scope, q, cursor } = listDocumentsQuerySchema.parse(request.query);
+    const { scope, q, cursor, type } = listDocumentsQuerySchema.parse(request.query);
 
     const membership: Prisma.DocumentMemberWhereInput =
       scope === 'shared' ? { userId: user.id, role: { not: 'OWNER' } } : { userId: user.id, role: 'OWNER' };
     const where: Prisma.DocumentWhereInput = {
       members: { some: membership },
       trashedAt: scope === 'trash' ? { not: null } : null,
+      ...(type ? { type } : {}),
       ...(q
         ? {
             OR: [
@@ -76,7 +78,8 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
   app.post('/documents', async (request, reply) => {
     const user = currentUser(request);
     const { title, type } = createDocumentBodySchema.parse(request.body);
-    const state = encodeDoc(createMindMapDoc(title));
+    // SPEC-003 §3: fluxograma nasce como um quadro vazio.
+    const state = encodeDoc(type === 'DIAGRAM' ? createDiagramDoc() : createMindMapDoc(title));
     const doc = await app.prisma.document.create({
       data: {
         title,

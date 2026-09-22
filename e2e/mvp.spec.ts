@@ -20,7 +20,7 @@ async function choosePassword(page: Page, current: string, next: string) {
   await page.getByLabel('Nova senha', { exact: true }).fill(next);
   await page.getByLabel('Confirme a nova senha').fill(next);
   await page.getByRole('button', { name: 'Salvar nova senha' }).click();
-  await expect(page.getByRole('heading', { name: 'Mapas' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Documentos' })).toBeVisible();
 }
 
 async function newPage(browser: Browser) {
@@ -54,7 +54,8 @@ test('MVP: acesso, mapa colaborativo e permissões', async ({ browser }) => {
   await login(ana, 'ana@gmail.com', tempPassword);
   await choosePassword(ana, tempPassword, 'senha da ana 2026');
   await shot(ana, '04-painel-vazio');
-  await ana.getByRole('button', { name: '+ Novo mapa' }).click();
+  await ana.getByRole('button', { name: '+ Novo' }).click();
+  await ana.getByRole('menuitem', { name: /Mapa mental/ }).click();
   await ana.getByLabel('Título').fill('Planejamento 2027');
   await ana.getByRole('button', { name: 'Criar mapa' }).click();
   await expect(ana.getByText('Salvo')).toBeVisible();
@@ -91,7 +92,7 @@ test('MVP: acesso, mapa colaborativo e permissões', async ({ browser }) => {
   await ana.getByRole('button', { name: 'Fechar' }).click();
 
   // 6) Admin abre pelo "Compartilhados comigo" e edita junto, em tempo real.
-  await admin.getByRole('link', { name: 'Mapas' }).click();
+  await admin.getByRole('link', { name: 'Documentos' }).click();
   await admin.getByRole('tab', { name: 'Compartilhados comigo' }).click();
   await admin.getByRole('link', { name: /Planejamento 2027/ }).click();
   await expect(admin.getByText('Marketing')).toBeVisible();
@@ -123,18 +124,18 @@ test('MVP: acesso, mapa colaborativo e permissões', async ({ browser }) => {
   await expect(ana.getByText('Meta Q1')).toBeVisible();
 
   // 9) Painel da Ana mostra o mapa; busca pelo texto de um nó encontra.
-  await ana.getByRole('link', { name: 'Voltar para os mapas' }).click();
-  await ana.getByLabel('Buscar mapas').fill('Marketing');
+  await ana.getByRole('link', { name: 'Voltar para os documentos' }).click();
+  await ana.getByLabel('Buscar documentos').fill('Marketing');
   await expect(ana.getByRole('link', { name: /Planejamento 2027/ })).toBeVisible();
   await shot(ana, '09-painel');
 });
 
-test('não-membro que tenta abrir um mapa pelo link vê "Mapa não encontrado"', async ({ browser }) => {
+test('não-membro que tenta abrir um mapa pelo link vê "Documento não encontrado"', async ({ browser }) => {
   const page = await newPage(browser);
   await login(page, 'admin@paglamp.com.br', 'nova senha do admin');
-  await expect(page.getByRole('heading', { name: 'Mapas' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Documentos' })).toBeVisible();
   await page.goto('/m/id-que-nao-existe');
-  await expect(page.getByText('Mapa não encontrado')).toBeVisible();
+  await expect(page.getByText('Documento não encontrado')).toBeVisible();
 });
 
 test('rotas protegidas mandam para o login e voltam depois', async ({ browser }) => {

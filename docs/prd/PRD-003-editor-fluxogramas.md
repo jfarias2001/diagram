@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aprovado** (2026-09-22) |
+| Status | **Implementado** (2026-09-22) |
 | Autor | Claude (a partir do pedido do usuário) |
 | Data | 2026-09-22 |
 | SPEC | [SPEC-003](../spec/SPEC-003-editor-fluxogramas.md) |
@@ -51,14 +51,14 @@ Todos os colaboradores.
 - Toda a checklist de segurança do CLAUDE.md (texto sempre renderizado como texto).
 
 ## 6. Critérios de aceite
-- [ ] Dado o painel, quando o usuário clica em "Novo fluxograma", então abre um quadro vazio com a paleta de formas.
-- [ ] Dado o quadro, quando o usuário arrasta uma Decisão e puxa duas setas rotuladas "Sim" e "Não" para duas formas, então o fluxo aparece igual para um colega que está com o documento aberto.
-- [ ] Dado uma forma com 3 setas, quando é apagada, então as 3 setas somem junto e Ctrl+Z traz tudo de volta.
-- [ ] Dado um fluxo bagunçado, quando o usuário clica em "Organizar", então as formas ficam de cima para baixo sem sobreposição, e Ctrl+Z volta ao que era.
-- [ ] Dado um Leitor, quando abre o fluxograma, então não consegue mover, criar nem apagar nada, nem forjando mensagens no WebSocket.
-- [ ] Dado um usuário sem acesso, quando tenta abrir o fluxograma pelo ID, então recebe "não encontrado".
-- [ ] Dado um fluxograma, quando exportado, então gera um PNG com todas as formas e setas.
-- [ ] A busca do painel encontra um fluxograma pelo texto de uma forma.
+- [x] Dado o painel, quando o usuário clica em "Novo fluxograma", então abre um quadro vazio com a paleta de formas.
+- [x] Dado o quadro, quando o usuário arrasta uma Decisão e puxa duas setas rotuladas "Sim" e "Não" para duas formas, então o fluxo aparece igual para um colega que está com o documento aberto.
+- [x] Dado uma forma com 3 setas, quando é apagada, então as 3 setas somem junto e Ctrl+Z traz tudo de volta.
+- [x] Dado um fluxo bagunçado, quando o usuário clica em "Organizar", então as formas ficam de cima para baixo sem sobreposição, e Ctrl+Z volta ao que era.
+- [x] Dado um Leitor, quando abre o fluxograma, então não consegue mover, criar nem apagar nada, nem forjando mensagens no WebSocket.
+- [x] Dado um usuário sem acesso, quando tenta abrir o fluxograma pelo ID, então recebe "não encontrado".
+- [x] Dado um fluxograma, quando exportado, então gera um PNG com todas as formas e setas.
+- [x] A busca do painel encontra um fluxograma pelo texto de uma forma.
 
 ## 7. Permissões
 Iguais às do mapa mental (PRD-001 §7):

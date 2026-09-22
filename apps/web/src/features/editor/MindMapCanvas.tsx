@@ -29,7 +29,6 @@ import { stableData } from './stableData';
 import { LOCAL_ORIGIN } from './useMindMap';
 
 const ROOT_COLOR = '#667085';
-const DOUBLE_CLICK_MS = 450;
 const NO_PEERS: Array<{ name: string; color: string }> = [];
 const nodeTypes = { mind: MindNode };
 
@@ -78,7 +77,6 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
   const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef('');
-  const lastClick = useRef<{ id: string; at: number } | null>(null);
   const takePending = useCallback(() => {
     const text = pendingRef.current;
     pendingRef.current = '';
@@ -426,12 +424,10 @@ export function MindMapCanvas({ doc, nodes, provider, canEdit, undo, selectedId,
         selectionKeyCode={null}
         multiSelectionKeyCode={null}
         onNodeClick={(e, n) => {
-          // Duplo clique detectado aqui: o primeiro clique troca a seleção e o
-          // navegador pode entregar o dblclick ao fundo, não ao nó (SPEC-002 §5.8).
-          const last = lastClick.current;
-          lastClick.current = { id: n.id, at: e.timeStamp };
-          if (canEdit && last?.id === n.id && e.timeStamp - last.at < DOUBLE_CLICK_MS) {
-            lastClick.current = null;
+          // `detail >= 2` é o segundo clique de um duplo clique, segundo o próprio
+          // navegador. O evento `dblclick` sozinho não basta: quando o primeiro
+          // clique troca a seleção, ele pode ir para o fundo (SPEC-002 §5.8).
+          if (canEdit && e.detail >= 2) {
             onSelect(n.id);
             setEditing({ id: n.id, draft: null });
             return;

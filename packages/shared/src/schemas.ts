@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { roleSchema } from './document.js';
+import { documentTypeSchema, roleSchema } from './document.js';
 
 // SPEC-001 §3 — contratos da API compartilhados entre web e api.
 
@@ -75,13 +75,14 @@ export const idParamSchema = z.object({ id: z.string().min(1).max(64) });
 
 export const listDocumentsQuerySchema = z.object({
   scope: z.enum(['mine', 'shared', 'trash']).default('mine'),
+  type: documentTypeSchema.optional(),
   q: z.string().trim().max(100).optional(),
   cursor: z.string().max(64).optional(),
 });
 
 export const createDocumentBodySchema = z.object({
   title: documentTitleSchema,
-  type: z.literal('MINDMAP').default('MINDMAP'),
+  type: documentTypeSchema.default('MINDMAP'),
 });
 
 export const updateDocumentBodySchema = z.object({ title: documentTitleSchema });

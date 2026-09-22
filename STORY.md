@@ -25,10 +25,47 @@
 
 ## Estado atual (atualize a cada entrada)
 
-- **Fase:** MVP (PRD-001/SPEC-001) e PRD-002/SPEC-002 (mapa com o mouse, notas e links) **implementados e testados**; ainda não publicados na VPS. PRDs 003–005 aprovados, sem SPEC.
+- **Fase:** MVP (SPEC-001), mapa com o mouse (SPEC-002) e **fluxogramas (SPEC-003)** implementados e testados; ainda não publicados na VPS. PRDs 004 e 005 aprovados, sem SPEC. PRD-006 em rascunho.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** aprovação da SPEC-003 (fluxogramas, rascunho); em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+- **Próximo passo:** aprovação do PRD-006 (arrastar livre, formatos de bloco, tema claro/escuro); em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+
+---
+
+## 2026-09-22 — Editor de fluxogramas (SPEC-003)
+**Tipo:** feature, fix
+**Refs:** PRD-003, SPEC-003, ADR-001
+
+**O que mudou**
+- **Painel:** virou "Documentos". O botão "+ Novo" pergunta o tipo, cada cartão mostra um ícone do tipo e há filtro Todos / Mapas mentais / Fluxogramas. A rota do editor continua `/m/:id` para os dois tipos.
+- **Fluxograma** (`type = DIAGRAM`, sem migration):
+  - paleta com 9 formas — arrastar para o quadro (com prévia seguindo o ponteiro) ou clicar, e nesse caso a forma nasce ligada à selecionada;
+  - setas entre formas, com alças nos 4 lados; a forma inteira vira alvo enquanto a seta está sendo puxada;
+  - soltar a seta no vazio abre um mini menu que cria a próxima forma já ligada;
+  - rótulo no conector ("Sim"/"Não"), estilo reto / ângulo reto / curva, tracejado, ponta e cor;
+  - redimensionar, grade de 16 px (Alt solta), guias de alinhamento;
+  - seleção múltipla por caixa e Shift, copiar/recortar/colar (validado com Zod) e duplicar;
+  - botão **Organizar** com `elkjs`, carregado sob demanda, desfeito com um Ctrl+Z;
+  - tempo real, presença, somente leitura, exportar PNG e busca pelo texto das formas.
+- **Modelo:** `shapes` e `edges` como mapas planos no Y.Doc; apagar forma apaga os conectores dela; conectores soltos são descartados na leitura e apagados pelo reparo.
+- **Correção herdada da SPEC-002:** a detecção de duplo clique por tempo abria a edição quando a pessoa clicava no mesmo bloco em dois momentos seguidos. Agora usa o `detail` do evento, como o navegador manda.
+- **Dependência nova:** `elkjs` 0.12 (EPL-2.0), prevista no ADR-001, em chunk separado de 1,43 MB, baixado só no primeiro "Organizar".
+- **Testes:** 218 de unidade e integração (mais 57) e 5 E2E. Entre os novos: modelo do fluxograma (integridade, reparo, clipboard), guias de alinhamento, Organizar, desempenho com 500 formas, matriz de permissões rodando também com `DIAGRAM`, e o leitor forjando formas pelo WebSocket.
+
+**Revisão de segurança**
+- Checklist CLAUDE.md §9 revisada no que mudou:
+  - **Autorização:** nenhuma regra nova. A matriz de permissões (8 rotas × 6 papéis) agora roda **duas vezes**, com mapa e com fluxograma, e um teste confirma que forma e conector enviados por um leitor são descartados no servidor.
+  - **Tipo do documento:** `z.enum(['MINDMAP','DIAGRAM'])` na criação; qualquer outro valor dá 400 (teste).
+  - **XSS:** texto de forma e de conector renderizados como texto; nenhum `dangerouslySetInnerHTML` ou `innerHTML` no web.
+  - **CSS por cor:** só hex `#rrggbb`; qualquer outra coisa é ignorada na leitura (teste com `url(javascript:…)`).
+  - **Colar:** o JSON da área de transferência passa pelo Zod, com limite de 500 formas e 1.000 conectores; os ids colados nunca são reaproveitados; um clip inválido é ignorado.
+  - **Coordenadas e tamanhos** limitados na leitura e na escrita (NaN, Infinity e valores absurdos descartados).
+- `pnpm audit --prod`: **sem vulnerabilidades** (inclui o `elkjs`).
+
+**Pendências / próximos passos**
+- [ ] Mover uma forma só aparece para o colega ao soltar (decisão da SPEC-003 §4).
+- [ ] Setas em ângulo reto não desviam de outras formas (React Flow não faz roteamento com obstáculos).
+- [ ] PRD-006 aguardando aprovação; depois SPEC-004 (pastas) e SPEC-005 (versões).
 
 ---
 

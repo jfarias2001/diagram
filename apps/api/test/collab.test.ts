@@ -1,4 +1,4 @@
-import { addNode, decodeDoc, readNodes, updateNode } from '@diagram/shared';
+import { addEdge, addNode, addShape, decodeDoc, readDiagram, readNodes, updateNode } from '@diagram/shared';
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -182,6 +182,41 @@ describe('WebSocket /collab', () => {
     const stored = await storedNodes(id);
     expect(stored.root?.note).toBeUndefined();
     expect(stored.root?.link).toBeUndefined();
+  });
+
+  it('fluxograma: editor desenha, colega recebe, busca encontra; leitor forjando é descartado (SPEC-003 §7)', async () => {
+    const { owner, editor, viewer } = await setup();
+    const id = (await call(app, owner.cookie, 'POST', '/documents', { title: 'Fluxo', type: 'DIAGRAM' })).json().id as string;
+    await app.prisma.documentMember.createMany({
+      data: [
+        { documentId: id, userId: editor.user.id, role: 'EDITOR' },
+        { documentId: id, userId: viewer.user.id, role: 'VIEWER' },
+      ],
+    });
+    const e = connect(editor.cookie, id);
+    const v = connect(viewer.cookie, id);
+    const o = connect(owner.cookie, id);
+    await waitFor(() => e.state.synced && v.state.synced && o.state.synced);
+
+    addShape(e.doc, { id: 's1', kind: 'decision', x: 0, y: 0, text: 'Pedido aprovado quasimodoforma?' });
+    addShape(e.doc, { id: 's2', kind: 'process', x: 0, y: 160, text: 'Faturar' });
+    addEdge(e.doc, { id: 'c1', source: 's1', target: 's2', label: 'Sim' });
+    await waitFor(() => readDiagram(o.doc).edges.c1?.label === 'Sim');
+
+    addShape(v.doc, { id: 'hack', kind: 'process', x: 0, y: 0, text: 'invasão' });
+    addEdge(v.doc, { id: 'hack-edge', source: 's2', target: 's1' });
+    await new Promise((r) => setTimeout(r, 800));
+    expect(readDiagram(o.doc).shapes.hack).toBeUndefined();
+    expect(readDiagram(o.doc).edges['hack-edge']).toBeUndefined();
+
+    app.collab.instance.flushPendingStores();
+    await new Promise((r) => setTimeout(r, 300));
+    const row = await app.prisma.document.findUniqueOrThrow({ where: { id } });
+    const stored = readDiagram(decodeDoc(new Uint8Array(row.yState!)));
+    expect(Object.keys(stored.shapes).sort()).toEqual(['s1', 's2']);
+    expect(stored.edges['hack-edge']).toBeUndefined();
+    const res = await call(app, owner.cookie, 'GET', '/documents?q=quasimodoforma');
+    expect(res.json().items.map((d: { id: string }) => d.id)).toContain(id);
   });
 
   it('remover o membro derruba a conexão e ele não volta', async () => {

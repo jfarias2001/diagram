@@ -1,6 +1,16 @@
 import * as Y from 'yjs';
+import { extractDiagramSearchText, readDiagram } from './diagram.js';
 import { isSafeLink, type MindMapNode, NODE_LINK_MAX, NODE_NOTE_MAX, NODE_TEXT_MAX } from './document.js';
-import { branchIds, childrenIndex, computeTreeRepairs, findRoot, isInBranch, type NodeRecord, orderBetween } from './tree.js';
+import {
+  branchIds,
+  childrenIndex,
+  computeTreeRepairs,
+  extractSearchText,
+  findRoot,
+  isInBranch,
+  type NodeRecord,
+  orderBetween,
+} from './tree.js';
 
 // Acesso ao Y.Doc do mapa mental (SPEC-001 §2.2). Toda escrita passa por aqui.
 
@@ -189,3 +199,13 @@ export function repairTree(doc: Y.Doc, origin?: unknown): number {
 }
 
 export { findRoot };
+
+/**
+ * Texto para a busca de qualquer documento (SPEC-003 §2.3). Um documento só tem
+ * um dos dois conteúdos, então o servidor não precisa saber o tipo.
+ */
+export function extractDocSearchText(doc: Y.Doc, max = 10_000): string {
+  const mind = extractSearchText(readNodes(doc), max);
+  const diagram = extractDiagramSearchText(readDiagram(doc), max);
+  return [mind, diagram].filter(Boolean).join(' ').slice(0, max);
+}

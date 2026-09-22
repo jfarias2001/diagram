@@ -1,4 +1,4 @@
-import { extractSearchText, hasRole, readNodes, type Role } from '@diagram/shared';
+import { extractDocSearchText, hasRole, type Role } from '@diagram/shared';
 import { Database } from '@hocuspocus/extension-database';
 import { type Connection, Hocuspocus } from '@hocuspocus/server';
 import websocket from '@fastify/websocket';
@@ -110,7 +110,7 @@ export default fp<{ env: Env }>(async (app, { env }) => {
             data: {
               yState: new Uint8Array(state),
               sizeBytes: state.byteLength,
-              searchText: extractSearchText(readNodes(document)),
+              searchText: extractDocSearchText(document),
               lastEditedById: (lastContext as CollabContext | undefined)?.userId ?? undefined,
             },
           });

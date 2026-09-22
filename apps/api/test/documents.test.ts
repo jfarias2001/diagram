@@ -1,6 +1,7 @@
 import type { MemberRole, User } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { decodeDoc, readDiagram, readNodes } from '@diagram/shared';
 import { purgeTrash } from '../src/modules/documents/purge.js';
 import { call, createUser, createTestApp, login, userWithSession } from './helpers.js';
 
@@ -22,8 +23,8 @@ afterAll(async () => {
 });
 
 /** Documento novo do `owner`, com editor/commenter/viewer/target como membros. */
-async function setupDocument(): Promise<string> {
-  const res = await call(app, actors.owner.cookie, 'POST', '/documents', { title: 'Planejamento' });
+async function setupDocument(type: 'MINDMAP' | 'DIAGRAM' = 'MINDMAP'): Promise<string> {
+  const res = await call(app, actors.owner.cookie, 'POST', '/documents', { title: 'Planejamento', type });
   expect(res.statusCode).toBe(201);
   const id = res.json().id as string;
   const roles: Array<[User, MemberRole]> = [
@@ -75,13 +76,14 @@ const ACTOR_ROLE: Record<keyof typeof actors, MemberRole | null> = {
   admin: null, // admin não tem exceção
 };
 
-describe('matriz de permissões (PRD-001 §7)', () => {
+// PRD-001 §7, e a mesma matriz para fluxogramas (SPEC-003 §6): o tipo não muda nenhuma regra.
+describe.each(['MINDMAP', 'DIAGRAM'] as const)('matriz de permissões (PRD-001 §7) — %s', (type) => {
   for (const route of ROUTES) {
     for (const actorName of Object.keys(ACTOR_ROLE) as Array<keyof typeof actors>) {
       const role = ACTOR_ROLE[actorName];
       const expected = role === null ? 404 : RANK[role] >= RANK[route.min] ? 'ok' : 403;
       it(`${route.name} × ${actorName} → ${expected}`, async () => {
-        const id = await setupDocument();
+        const id = await setupDocument(type);
         const res = await route.run(actors[actorName], id);
         if (expected === 'ok') expect(res.statusCode, res.body).toBeLessThan(300);
         else expect(res.statusCode, res.body).toBe(expected);
@@ -95,6 +97,37 @@ describe('matriz de permissões (PRD-001 §7)', () => {
     const missing = await call(app, actors.outsider.cookie, 'GET', '/documents/nao-existe');
     expect(other.statusCode).toBe(404);
     expect(other.body).toBe(missing.body);
+  });
+});
+
+describe('fluxogramas (SPEC-003 §3)', () => {
+  it('cria quadro vazio do tipo DIAGRAM; tipo desconhecido é 400', async () => {
+    const res = await call(app, actors.owner.cookie, 'POST', '/documents', { title: 'Fluxo de pedido', type: 'DIAGRAM' });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().type).toBe('DIAGRAM');
+    const row = await app.prisma.document.findUniqueOrThrow({ where: { id: res.json().id } });
+    const doc = decodeDoc(new Uint8Array(row.yState!));
+    expect(doc.getMap('meta').get('kind')).toBe('DIAGRAM');
+    expect(Object.keys(readDiagram(doc).shapes)).toHaveLength(0);
+    expect(Object.keys(readNodes(doc))).toHaveLength(0);
+
+    const bad = await call(app, actors.owner.cookie, 'POST', '/documents', { title: 'X', type: 'FOO' });
+    expect(bad.statusCode).toBe(400);
+  });
+
+  it('filtra a lista por tipo e duplicar mantém o tipo', async () => {
+    const mind = await setupDocument('MINDMAP');
+    const flow = await setupDocument('DIAGRAM');
+    const onlyFlows = (await call(app, actors.owner.cookie, 'GET', '/documents?type=DIAGRAM')).json();
+    const ids = onlyFlows.items.map((d: { id: string }) => d.id);
+    expect(ids).toContain(flow);
+    expect(ids).not.toContain(mind);
+    expect(onlyFlows.items.every((d: { type: string }) => d.type === 'DIAGRAM')).toBe(true);
+    const all = (await call(app, actors.owner.cookie, 'GET', '/documents')).json();
+    expect(all.items.map((d: { id: string }) => d.id)).toEqual(expect.arrayContaining([mind, flow]));
+
+    const copy = await call(app, actors.viewer.cookie, 'POST', `/documents/${flow}/duplicate`, {});
+    expect(copy.json()).toMatchObject({ type: 'DIAGRAM', myRole: 'OWNER' });
   });
 });
 

@@ -19,7 +19,7 @@ export function AppShell() {
           </Link>
           <nav className="ml-2 flex items-center gap-1">
             <NavLink to="/" end className={navClass}>
-              Mapas
+              Documentos
             </NavLink>
             {me?.role === 'ADMIN' && (
               <NavLink to="/admin/usuarios" className={navClass}>

@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aprovado** (2026-09-22) |
+| Status | **Implementado** (2026-09-22) |
 | PRD | [PRD-003](../prd/PRD-003-editor-fluxogramas.md) |
 | ADRs | [ADR-001](../adr/ADR-001-stack.md) (React Flow + `elkjs`), [ADR-002](../adr/ADR-002-colaboracao-tempo-real.md) |
 | Data | 2026-09-22 |
@@ -254,20 +254,20 @@ Tamanhos padrão de cada forma nova (w × h): processo 160×72, início/fim 160�
 
 ## 8. Tarefas (em ordem)
 
-1. [ ] `shared`: `diagram.ts` (modelo, leitura, operações, reparo, clip, busca) + `extractDocSearchText` + schemas + testes de unidade.
-2. [ ] API: `POST /documents` com `DIAGRAM`, filtro `type`, `store` com `extractDocSearchText` + testes de integração (inclui a matriz com `DIAGRAM` e o leitor pelo WebSocket).
-3. [ ] Web: extrair `EditorHeader` e `exportCanvasPng`; o `EditorPage` escolhe o editor pelo tipo (o mapa continua igual; os E2E atuais continuam verdes).
-4. [ ] Painel: nomes novos, "+ Novo" com o tipo, ícone do tipo, filtro; ajustar os E2E.
-5. [ ] Web: `useDiagram`, `ShapeNode` + `shapes.tsx`, `DiagramCanvas` básico (mostrar, selecionar, mover, redimensionar, apagar, desfazer).
-6. [ ] Web: `ShapePalette` (arrastar e clicar) e edição de texto.
-7. [ ] Web: conectores: `FlowEdge`, conectar, reconectar, rótulo e `QuickShapeMenu`.
-8. [ ] Web: `SelectionBar` (estilos de forma e de conector) e `DiagramControls`.
-9. [ ] Web: seleção múltipla, setas, copiar/recortar/colar/duplicar.
-10. [ ] Web: guias de alinhamento + Alt/grade.
-11. [ ] Web: `elkjs` + `autoLayout` + botão Organizar.
-12. [ ] Presença e modo leitura; teste de desempenho com 500 formas.
-13. [ ] E2E do fluxograma.
-14. [ ] Revisão de segurança (CLAUDE.md §9) + `pnpm audit --prod` + STORY.md + PRD/SPEC `Implementado` + commit/push.
+1. [x] `shared`: `diagram.ts` (modelo, leitura, operações, reparo, clip, busca) + `extractDocSearchText` + schemas + testes de unidade.
+2. [x] API: `POST /documents` com `DIAGRAM`, filtro `type`, `store` com `extractDocSearchText` + testes de integração (inclui a matriz com `DIAGRAM` e o leitor pelo WebSocket).
+3. [x] Web: extrair `EditorHeader` e `exportCanvasPng`; o `EditorPage` escolhe o editor pelo tipo (o mapa continua igual; os E2E atuais continuam verdes).
+4. [x] Painel: nomes novos, "+ Novo" com o tipo, ícone do tipo, filtro; ajustar os E2E.
+5. [x] Web: `useDiagram`, `ShapeNode` + `shapes.tsx`, `DiagramCanvas` básico (mostrar, selecionar, mover, redimensionar, apagar, desfazer).
+6. [x] Web: `ShapePalette` (arrastar e clicar) e edição de texto.
+7. [x] Web: conectores: `FlowEdge`, conectar, reconectar, rótulo e `QuickShapeMenu`.
+8. [x] Web: `SelectionBar` (estilos de forma e de conector) e `DiagramControls`.
+9. [x] Web: seleção múltipla, setas, copiar/recortar/colar/duplicar.
+10. [x] Web: guias de alinhamento + Alt/grade.
+11. [x] Web: `elkjs` + `autoLayout` + botão Organizar.
+12. [x] Presença e modo leitura; teste de desempenho com 500 formas.
+13. [x] E2E do fluxograma.
+14. [x] Revisão de segurança (CLAUDE.md §9) + `pnpm audit --prod` + STORY.md + PRD/SPEC `Implementado` + commit/push.
 
 ## 9. Variáveis de ambiente novas
 Nenhuma.
@@ -279,3 +279,14 @@ Nenhuma.
 - **`elkjs` pesa ~1,4 MB:** só é baixado na primeira vez que alguém clica em "Organizar".
 - **Roda do mouse = zoom** (igual ao mapa) e **arrastar no fundo = caixa de seleção** (§5.2): quem vem do draw.io pode estranhar mover o quadro com Espaço+arrastar. A dica fica na lista de atalhos, e dá para mudar se a equipe preferir.
 - **Nomes do painel:** as abas mudam de nome ("Meus mapas" → "Meus documentos"), aprovado no PRD-003 §9. A URL `/m/:id` não muda.
+
+## 11. Notas de implementação (desvios e decisões tomadas durante a implementação)
+
+- **Arrastar da paleta:** o arrastar HTML5 (`draggable` + `dataTransfer`) foi trocado por **eventos de ponteiro**. Ele não funcionava no navegador controlado pelo Playwright e não serve para tela de toque. Agora a paleta acompanha o ponteiro, mostra uma prévia da forma e solta no quadro; um clique sem mover continua criando a forma no centro (ou ligada à selecionada).
+- **Soltar a seta em cima da forma:** o React Flow só conecta perto de uma alça (`connectionRadius`), e o meio de uma forma grande fica longe demais. Enquanto uma seta está sendo puxada, a forma inteira vira alvo: um `Handle` do tamanho da forma é montado só nesse momento (`useConnection`), então ele não atrapalha arrastar nem selecionar.
+- **Duplo clique (corrige também a SPEC-002 §11):** a detecção por tempo (dois cliques no mesmo nó em 450 ms) disparava a edição quando a pessoa clicava no mesmo bloco em dois momentos seguidos do trabalho normal. Agora vale o `detail >= 2` do próprio evento de clique, que é o critério do navegador e respeita a configuração do sistema. Os dois editores usam a mesma regra.
+- **Cápsula (Início/Fim) desenhada em CSS:** esticar um SVG deformaria as pontas arredondadas. As outras formas continuam em SVG.
+- **`createDiagramDoc()` não recebe título:** o quadro nasce vazio, então o título fica só no banco (`Document.title`).
+- **Barra superior compartilhada:** o cabeçalho do editor virou `EditorHeader` (título, status, presença, exportar, compartilhar) e o export virou `exportCanvasPng`, usado pelos dois editores. A rota continua `/m/:id`; o `EditorPage` escolhe o editor pelo `meta.type`.
+- **Busca:** o servidor usa `extractDocSearchText`, que cobre mapa e fluxograma sem precisar saber o tipo do documento.
+- **E2E:** os testes antigos foram ajustados aos nomes novos do painel ("Documentos", menu "+ Novo"). No mini menu, "Processo" e "Sub-processo" exigem `exact: true` no seletor.
