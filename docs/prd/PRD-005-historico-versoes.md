@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Rascunho |
+| Status | **Aprovado** (2026-09-22) |
 | Autor | Claude (a partir do pedido do usuário) |
 | Data | 2026-09-22 |
 | SPEC | (quando existir) |
@@ -66,6 +66,7 @@ ADMIN não vê versões de documentos em que não é membro.
 - Restaurar só um ramo/pedaço de uma versão.
 
 ## 9. Perguntas em aberto
-- [ ] Leitores e Comentadores podem ver versões antigas? (Proposta acima: **sim**, pois já têm acesso ao documento. Mas uma versão antiga pode conter algo que o dono apagou de propósito — se isso for um problema, restringimos a Dono e Editor.)
-- [ ] Editor pode restaurar, ou só o Dono?
-- [ ] A retenção do §5.8 está boa?
+Respondidas pelo usuário em 2026-09-22:
+- [x] Quem restaura → **não só o Dono: Editor também restaura** (tabela do §7).
+- [x] Leitores e Comentadores veem versões antigas → **sim**, como proposto (aprovado junto com o PRD).
+- [x] Retenção do §5.8 → **aprovada** como proposta.

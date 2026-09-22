@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Rascunho |
+| Status | **Aprovado** (2026-09-22) |
 | Autor | Claude (a partir do pedido do usuário) |
 | Data | 2026-09-22 |
 | SPEC | (quando existir) |
@@ -79,5 +79,6 @@ Iguais às do mapa mental (PRD-001 §7):
 - Várias páginas dentro do mesmo fluxograma.
 
 ## 9. Perguntas em aberto
-- [ ] A lista de formas do §5.2 cobre o que a equipe usa? Falta alguma (ex.: "Espera/Atraso", "Conector de página")?
-- [ ] Renomear as abas do painel para "Meus documentos" está ok, ou prefere manter "Meus mapas"?
+Respondidas pelo usuário em 2026-09-22:
+- [x] Formas → **a lista do §5.2 basta por enquanto**; outras formas ficam para depois.
+- [x] Abas → **renomear para "Meus documentos"**.

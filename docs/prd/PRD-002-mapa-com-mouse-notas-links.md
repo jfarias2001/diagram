@@ -2,10 +2,10 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Rascunho |
+| Status | **Aprovado** (2026-09-22) |
 | Autor | Claude (a partir do pedido do usuário) |
 | Data | 2026-09-22 |
-| SPEC | (quando existir) |
+| SPEC | [SPEC-002](../spec/SPEC-002-mapa-com-mouse-notas-links.md) |
 
 ## 1. Problema
 No MVP, criar e organizar blocos no mapa mental só funciona pelo teclado (`Tab`, `Enter`, `F2`...). Quem não conhece os atalhos não consegue montar um mapa, e mesmo quem conhece sente falta de clicar para adicionar um bloco, como no MindMeister. Além disso, o bloco só guarda um texto curto: não dá para anotar detalhes nem apontar para um site ou arquivo.
@@ -70,5 +70,6 @@ Todos os colaboradores que editam mapas mentais (Dono e Editor). Leitores e Come
 - Comentários (é outra feature, para o papel Comentador).
 
 ## 9. Perguntas em aberto
-- [ ] O limite de 5.000 caracteres por nota está bom?
-- [ ] O link deve aparecer só como ícone, ou também mostrar o endereço embaixo do texto do bloco?
+Respondidas pelo usuário em 2026-09-22 ("está excelente"):
+- [x] Limite da nota → **5.000 caracteres**, como proposto.
+- [x] Como mostrar o link → **só o ícone**; o endereço aparece na dica ao passar o mouse.

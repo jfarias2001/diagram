@@ -28,7 +28,37 @@
 - **Fase:** MVP (PRD-001/SPEC-001) **implementado e testado**; ainda não publicado na VPS.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** aprovação dos PRDs 002–005 (rascunho); em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+- **Próximo passo:** aprovação da SPEC-002 (rascunho) e confirmação das regras de pastas compartilhadas (PRD-004 §9); em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+
+---
+
+## 2026-09-22 — PRDs 002 a 005 aprovados; SPEC-002 escrita
+**Tipo:** docs
+**Refs:** PRD-002, PRD-003, PRD-004, PRD-005, SPEC-002
+
+**O que mudou**
+- Usuário aprovou os quatro PRDs e respondeu às perguntas:
+  - **PRD-002:** aprovado como está (nota até 5.000 caracteres; link só como ícone).
+  - **PRD-003:** a lista de formas basta por enquanto; as abas passam a se chamar "Meus documentos".
+  - **PRD-004:** quer pastas **pessoais e compartilhadas**. As regras das compartilhadas (acesso herdado pela pasta, só o dono do documento o coloca numa pasta compartilhada) foram escritas no §5.C e **aguardam confirmação** antes da SPEC-004.
+  - **PRD-005:** o Editor também restaura versões, não só o Dono.
+- **SPEC-002** escrita (rascunho):
+  - novos campos `note` e `link` no nó do Y.Doc, sem migration;
+  - `normalizeLink` e leitura defensiva;
+  - barra flutuante com `NodeToolbar`, "+" no hover via CSS, painel de nota e barra de controles;
+  - plano de testes com E2E "só mouse".
+
+**Revisão de segurança**
+- Só documentação. A SPEC-002 §6 cobre:
+  - XSS por link, bloqueado em duas camadas (na interface e na leitura do Y.Doc);
+  - `rel="noopener noreferrer"` nos links;
+  - nota renderizada como texto;
+  - leitor forjando a nota pelo WebSocket, com teste novo.
+
+**Pendências / próximos passos**
+- [ ] Aprovação da SPEC-002.
+- [ ] Confirmar as regras de pastas compartilhadas (PRD-004 §9).
+- [ ] SPEC-003 (fluxogramas) depois da SPEC-002.
 
 ---
 
