@@ -28,7 +28,28 @@
 - **Fase:** MVP (PRD-001/SPEC-001) **implementado e testado**; ainda não publicado na VPS.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** concluir o primeiro deploy na VPS (build ok; falta o admin inicial) e PRD de backup do banco antes de liberar para a equipe.
+- **Próximo passo:** aprovação dos PRDs 002–005 (rascunho); em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+
+---
+
+## 2026-09-22 — PRDs 002 a 005 em rascunho (mouse, fluxogramas, pastas, versões)
+**Tipo:** docs
+**Refs:** PRD-002, PRD-003, PRD-004, PRD-005
+
+**O que mudou**
+- Pedido do usuário: adicionar blocos com o mouse (hoje só teclado), trabalhar com diagramas e "mais coisas". Escolhas dele: barra flutuante no bloco selecionado, "+" ao passar o mouse, duplo clique para editar; diagrama prioritário = fluxograma; extras = notas e links, pastas, histórico de versões.
+- Dividido em 4 PRDs independentes, a entregar nesta ordem:
+  - **PRD-002** — editar o mapa mental com o mouse + notas e links no nó;
+  - **PRD-003** — editor de fluxogramas;
+  - **PRD-004** — pastas pessoais no painel;
+  - **PRD-005** — histórico de versões com restauração.
+
+**Revisão de segurança**
+- Só documentação. Riscos já apontados nos PRDs: links só `http/https/mailto` (PRD-002), IDOR em pastas e versões (PRD-004/005), somente leitura imposto no servidor para fluxogramas (PRD-003).
+
+**Pendências / próximos passos**
+- [ ] Aprovação e respostas às perguntas em aberto (§9) de cada PRD.
+- [ ] SPEC-002 após aprovação do PRD-002.
 
 ---
 
