@@ -25,10 +25,45 @@
 
 ## Estado atual (atualize a cada entrada)
 
-- **Fase:** SPEC-001, 002, 003, **005** e **006** implementadas e testadas; ainda não publicadas na VPS. Falta implementar a SPEC-004 (pastas).
+- **Fase:** SPEC-001 a 006 **todas implementadas e testadas** (274 testes + 8 E2E); ainda não publicadas na VPS.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** implementar a SPEC-004 (pastas); em paralelo, concluir o primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+- **Próximo passo:** primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+
+---
+
+## 2026-09-22 — Pastas pessoais e compartilhadas (SPEC-004)
+**Tipo:** feature
+**Refs:** PRD-004, SPEC-004
+
+**O que mudou**
+- **Tabelas novas** (migration `add_folders`): `Folder` (pessoal ou compartilhada, até 3 níveis, com `rootId` apontando para a pasta principal), `FolderMember` e `DocumentPlacement`. No `Document`, a coluna `sharedFolderId`.
+- **Dois vínculos diferentes, de propósito:** a pasta **pessoal** é um vínculo por usuário (só muda o *meu* painel) e a **compartilhada** é do documento (uma só, global).
+- **A autorização mudou de fundo:** o papel de alguém num documento passou a ser o **maior entre o direto e o herdado da pasta compartilhada**, calculado num lugar só (`assertDocumentAccess`). Dono da pasta e Editor herdam Editor; Leitor herda Leitor; **a herança nunca dá Dono** — mandar para a lixeira e apagar continuam sendo só do dono do documento. Os 108 testes de permissão que já existiam continuaram passando sem mudança.
+- **Perder acesso vale na hora:** remover ou rebaixar um membro da pasta, tirar o documento da pasta ou apagar a pasta derruba as conexões Yjs afetadas; quem só tinha acesso herdado cai na tela "documento não encontrado", mesmo com o documento aberto.
+- **Painel:** lateral com "Minhas pastas" e "Pastas compartilhadas" em árvore, caminho no topo (`Comercial › 2026`), arrastar o cartão do documento até a pasta, menu "Mover para…", "+ Novo" já criando dentro da pasta aberta, e a busca mostrando em que pasta cada resultado está. A pasta aberta fica na URL (`?pasta=`).
+- **Regras do PRD implementadas com teste:** nome único entre irmãs (ignorando acento e caixa), 3 níveis, recusa de ciclo, apagar pasta não apaga documentos, documento na lixeira some da pasta e volta ao ser restaurado, só o dono do documento o coloca numa pasta compartilhada, e só o dono da pasta gerencia membros.
+- **Correção encontrada pelo E2E completo (regressão minha da SPEC-006):** o E2E da SPEC-002 ainda clicava no botão "Cor", que virou "Cores" com o popover de contorno e preenchimento. Rótulos atualizados no teste.
+- **Correção de teste instável (SPEC-005):** a retenção agrupa por dia UTC e o teste montava as datas a partir de "agora", então ele passava ou falhava conforme a hora do dia. Agora ancora na meia-noite UTC.
+- **Testes:** 274 de unidade e integração (mais 17) e 8 E2E. Entre os novos: pasta pessoal invisível para os outros e para o ADMIN, matriz do papel herdado (leitor → editor da pasta), "o maior papel vence", remoção de membro tirando o acesso, **herança valendo no WebSocket com o leitor forjando escrita**, e o E2E em que a colega entra na pasta, abre o documento só de leitura e perde o acesso ao ser removida.
+
+**Revisão de segurança**
+- Checklist CLAUDE.md §9 revisada no que mudou:
+  - **Autorização (risco nº 1):** o ponto único continua único; nenhuma rota consulta papel por fora. `assertFolderAccess` segue o mesmo desenho (sem vínculo → 404, papel fraco → 403).
+  - **IDOR:** pasta pessoal alheia responde 404 em listar, renomear, apagar e mover documento para ela (teste, inclusive com ADMIN).
+  - **Publicar documento alheio:** `PUT /shared-folder` exige ser **dono do documento** e ter poder na pasta — editor do documento recebe 403 (teste).
+  - **Somente leitura herdada:** o `onConnect` usa o papel efetivo; leitor herdado tem o update descartado no servidor (teste pelo WebSocket).
+  - **Revogação em tempo real:** remover membro, tirar da pasta e apagar a pasta derrubam as conexões.
+  - **Enumeração de e-mails:** rate limit de 30/min em adicionar membro, com a mesma resposta do compartilhamento de documento.
+  - **Limites:** 200 pastas por tipo e por usuário, 100 membros por pasta, profundidade 3, ciclo recusado; a árvore é resolvida em no máximo 3 consultas, sem recursão no banco.
+  - **Registro:** eventos novos de auditoria só com ids e papéis, nunca conteúdo.
+- `pnpm audit --prod`: **sem vulnerabilidades** (nenhuma dependência nova).
+
+**Pendências / próximos passos**
+- [ ] Abrir uma pasta mostra só os documentos dela, não os das subpastas (decisão da SPEC-004 §10).
+- [ ] Sem transferência de posse: se o dono de uma pasta compartilhada for desativado, só um ADMIN reativando devolve a gestão (SPEC-004 §10).
+- [ ] Mover subpasta entre pastas compartilhadas diferentes é recusado de propósito (§10).
+- [ ] Primeiro deploy na VPS e PRD de backup do banco.
 
 ---
 

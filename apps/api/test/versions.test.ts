@@ -195,7 +195,13 @@ describe('retenção (PRD-005 §5.8)', () => {
     const id = await setupDocument();
     const now = Date.now();
     const day = 24 * 60 * 60 * 1000;
-    const at = (daysAgo: number, hour: number) => new Date(now - daysAgo * day + hour * 60 * 60 * 1000);
+    // Ancorado na meia-noite UTC do dia: a retenção agrupa por dia UTC, e um
+    // offset a partir de "agora" cairia em dias diferentes conforme a hora.
+    const at = (daysAgo: number, hour: number) => {
+      const base = new Date(now - daysAgo * day);
+      base.setUTCHours(hour, 0, 0, 0);
+      return base;
+    };
 
     const make = (kind: 'AUTO' | 'NAMED' | 'CHECKPOINT', createdAt: Date) =>
       app.prisma.snapshot.create({

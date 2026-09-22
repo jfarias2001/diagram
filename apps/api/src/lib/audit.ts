@@ -21,7 +21,15 @@ export type AuditAction =
   | 'document.version_created'
   | 'document.version_restored'
   | 'document.version_deleted'
-  | 'snapshot.pruned';
+  | 'snapshot.pruned'
+  | 'folder.created'
+  | 'folder.renamed'
+  | 'folder.moved'
+  | 'folder.deleted'
+  | 'folder.member_added'
+  | 'folder.member_updated'
+  | 'folder.member_removed'
+  | 'document.folder_changed';
 
 interface AuditInput {
   action: AuditAction;

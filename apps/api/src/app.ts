@@ -10,6 +10,7 @@ import { purgeTrash } from './modules/documents/purge.js';
 import { documentRoutes } from './modules/documents/routes.js';
 import { pruneSnapshots } from './modules/documents/snapshots.js';
 import { versionRoutes } from './modules/documents/versions.js';
+import { folderRoutes } from './modules/folders/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
 import db from './plugins/db.js';
 import errors from './plugins/errors.js';
@@ -49,6 +50,7 @@ export async function buildApp(env: Env, options: { jobs?: boolean } = {}) {
       await v1.register(documentRoutes);
       await v1.register(memberRoutes);
       await v1.register(versionRoutes);
+      await v1.register(folderRoutes);
     },
     { prefix: '/api/v1' },
   );

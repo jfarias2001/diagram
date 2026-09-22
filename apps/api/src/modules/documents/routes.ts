@@ -11,10 +11,11 @@ import {
   updateDocumentBodySchema,
 } from '@diagram/shared';
 import type { Prisma } from '@prisma/client';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { audit } from '../../lib/audit.js';
 import { HttpError } from '../../lib/http-error.js';
 import { currentUser, requireAuth } from '../auth/plugin.js';
+import { assertFolderAccess } from '../folders/access.js';
 import { assertDocumentAccess } from './access.js';
 
 // SPEC-001 §3.3.
@@ -30,6 +31,17 @@ const summarySelect = (userId: string) =>
     trashedAt: true,
     owner: { select: { id: true, name: true } },
     members: { where: { userId }, select: { role: true } },
+    // Pasta do documento para mim (SPEC-004 §3.3): a compartilhada que eu enxergo,
+    // senão a minha pessoal.
+    sharedFolder: {
+      select: {
+        id: true,
+        name: true,
+        kind: true,
+        root: { select: { ownerId: true, members: { where: { userId }, select: { userId: true } } } },
+      },
+    },
+    placements: { where: { userId }, select: { folder: { select: { id: true, name: true, kind: true } } } },
   }) satisfies Prisma.DocumentSelect;
 
 export const documentRoutes: FastifyPluginAsync = async (app) => {
@@ -37,12 +49,25 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
 
   app.get('/documents', async (request): Promise<DocumentList> => {
     const user = currentUser(request);
-    const { scope, q, cursor, type } = listDocumentsQuerySchema.parse(request.query);
+    const { scope, q, cursor, type, folder } = listDocumentsQuerySchema.parse(request.query);
 
+    // Documento que chega até mim por uma pasta compartilhada (SPEC-004 §2.3).
+    const viaSharedFolder: Prisma.DocumentWhereInput = {
+      sharedFolder: { root: { OR: [{ ownerId: user.id }, { members: { some: { userId: user.id } } }] } },
+    };
     const membership: Prisma.DocumentMemberWhereInput =
       scope === 'shared' ? { userId: user.id, role: { not: 'OWNER' } } : { userId: user.id, role: 'OWNER' };
+
+    // Dentro de uma pasta, vale tudo que eu enxergo; fora dela, a aba escolhida.
+    const reach: Prisma.DocumentWhereInput = folder
+      ? { OR: [{ members: { some: { userId: user.id } } }, viaSharedFolder] }
+      : scope === 'shared'
+        ? { OR: [{ members: { some: membership } }, { AND: [viaSharedFolder, { ownerId: { not: user.id } }] }] }
+        : { members: { some: membership } };
+
     const where: Prisma.DocumentWhereInput = {
-      members: { some: membership },
+      ...reach,
+      ...(folder ? await folderFilter(app.prisma, user.id, folder) : {}),
       trashedAt: scope === 'trash' ? { not: null } : null,
       ...(type ? { type } : {}),
       ...(q
@@ -63,15 +88,7 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
 
-    const items: DocumentSummary[] = rows.slice(0, PAGE_SIZE).map((d) => ({
-      id: d.id,
-      title: d.title,
-      type: d.type,
-      myRole: d.members[0]?.role ?? 'VIEWER',
-      owner: d.owner,
-      updatedAt: d.updatedAt.toISOString(),
-      trashedAt: d.trashedAt?.toISOString() ?? null,
-    }));
+    const items: DocumentSummary[] = rows.slice(0, PAGE_SIZE).map((d) => toSummary(d, user.id));
     return { items, nextCursor: rows.length > PAGE_SIZE ? (items.at(-1)?.id ?? null) : null };
   });
 
@@ -93,7 +110,7 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
       },
       select: summarySelect(user.id),
     });
-    return reply.code(201).send(toSummary(doc));
+    return reply.code(201).send(toSummary(doc, user.id));
   });
 
   app.get('/documents/:id', async (request) => {
@@ -101,7 +118,7 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     const { id } = idParamSchema.parse(request.params);
     await assertDocumentAccess(app.prisma, user.id, id, 'VIEWER');
     const doc = await app.prisma.document.findUniqueOrThrow({ where: { id }, select: summarySelect(user.id) });
-    return toSummary(doc);
+    return toSummary(doc, user.id);
   });
 
   app.patch('/documents/:id', async (request) => {
@@ -110,7 +127,7 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     const { title } = updateDocumentBodySchema.parse(request.body);
     await assertDocumentAccess(app.prisma, user.id, id, 'EDITOR');
     const doc = await app.prisma.document.update({ where: { id }, data: { title }, select: summarySelect(user.id) });
-    return toSummary(doc);
+    return toSummary(doc, user.id);
   });
 
   app.post('/documents/:id/duplicate', async (request, reply) => {
@@ -139,7 +156,7 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
       },
       select: summarySelect(user.id),
     });
-    return reply.code(201).send(toSummary(copy));
+    return reply.code(201).send(toSummary(copy, user.id));
   });
 
   app.post('/documents/:id/trash', async (request, reply) => {
@@ -175,7 +192,25 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
   });
 };
 
-function toSummary(d: {
+/**
+ * Filtro de pasta (SPEC-004 §3.3). `none` = sem pasta nenhuma minha. Pasta que
+ * não é minha nem compartilhada comigo dá 404, sem revelar que existe.
+ */
+async function folderFilter(
+  prisma: FastifyInstance['prisma'],
+  userId: string,
+  folder: string,
+): Promise<Prisma.DocumentWhereInput> {
+  if (folder === 'none') {
+    return { sharedFolderId: null, placements: { none: { userId } } };
+  }
+  const { folder: row } = await assertFolderAccess(prisma, userId, folder, 'VIEWER');
+  return row.kind === 'PERSONAL'
+    ? { placements: { some: { userId, folderId: row.id } } }
+    : { sharedFolderId: row.id };
+}
+
+type SummaryRow = {
   id: string;
   title: string;
   type: 'MINDMAP' | 'DIAGRAM';
@@ -183,7 +218,26 @@ function toSummary(d: {
   trashedAt: Date | null;
   owner: { id: string; name: string };
   members: { role: DocumentSummary['myRole'] }[];
-}): DocumentSummary {
+  sharedFolder: {
+    id: string;
+    name: string;
+    kind: 'PERSONAL' | 'SHARED';
+    root: { ownerId: string; members: { userId: string }[] };
+  } | null;
+  placements: { folder: { id: string; name: string; kind: 'PERSONAL' | 'SHARED' } }[];
+};
+
+/** A pasta compartilhada só aparece para quem participa dela. */
+function folderOf(d: SummaryRow, userId: string): DocumentSummary['folder'] {
+  const shared = d.sharedFolder;
+  if (shared && (shared.root.ownerId === userId || shared.root.members.length > 0)) {
+    return { id: shared.id, name: shared.name, kind: shared.kind };
+  }
+  const personal = d.placements[0]?.folder;
+  return personal ? { id: personal.id, name: personal.name, kind: personal.kind } : null;
+}
+
+function toSummary(d: SummaryRow, userId: string): DocumentSummary {
   return {
     id: d.id,
     title: d.title,
@@ -192,5 +246,6 @@ function toSummary(d: {
     owner: d.owner,
     updatedAt: d.updatedAt.toISOString(),
     trashedAt: d.trashedAt?.toISOString() ?? null,
+    folder: folderOf(d, userId),
   };
 }

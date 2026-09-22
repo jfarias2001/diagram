@@ -30,6 +30,12 @@ enum SnapshotKind {
   CHECKPOINT
 }
 
+/// Pasta pessoal (só do dono) ou compartilhada com a equipe (SPEC-004 §2.1).
+enum FolderKind {
+  PERSONAL
+  SHARED
+}
+
 enum MemberRole {
   OWNER
   EDITOR
@@ -55,6 +61,9 @@ model User {
   sessions           Session[]
   memberships        DocumentMember[]
   ownedDocuments     Document[]       @relation("owner")
+  ownedFolders       Folder[]         @relation("folderOwner")
+  folderMemberships  FolderMember[]
+  placements         DocumentPlacement[]
 }
 
 model Session {
@@ -89,9 +98,71 @@ model Document {
   updatedAt      DateTime         @updatedAt
   members        DocumentMember[]
   snapshots      Snapshot[]
+  /// Pasta compartilhada em que o documento está (SPEC-004 §2.1). Global, no máximo uma.
+  sharedFolderId String?
+  sharedFolder   Folder?          @relation("sharedFolder", fields: [sharedFolderId], references: [id], onDelete: SetNull)
+  placements     DocumentPlacement[]
 
   @@index([ownerId, trashedAt])
   @@index([trashedAt])
+  @@index([sharedFolderId])
+}
+
+/// Pasta do painel (SPEC-004 §2.1). Até 3 níveis.
+model Folder {
+  id        String     @id @default(cuid())
+  kind      FolderKind
+  name      String
+  /// PERSONAL: o único que a vê. SHARED: dono da pasta.
+  ownerId   String
+  owner     User       @relation("folderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Folder?    @relation("folderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[]   @relation("folderTree")
+  /// Pasta principal (1º nível) — onde ficam os membros. Igual ao id quando depth = 0.
+  rootId    String
+  root      Folder     @relation("folderRoot", fields: [rootId], references: [id], onDelete: Cascade)
+  branch    Folder[]   @relation("folderRoot")
+  /// 0, 1 ou 2.
+  depth     Int        @default(0)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  members    FolderMember[]
+  placements DocumentPlacement[]
+  sharedDocs Document[]          @relation("sharedFolder")
+
+  @@index([ownerId, kind, parentId])
+  @@index([rootId])
+}
+
+/// Membro de uma pasta compartilhada. Só EDITOR ou VIEWER — o dono é Folder.ownerId.
+model FolderMember {
+  folderId  String
+  userId    String
+  role      MemberRole
+  addedById String?
+  createdAt DateTime   @default(now())
+  folder    Folder     @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([folderId, userId])
+  @@index([userId])
+}
+
+/// Documento numa pasta PESSOAL: vínculo por usuário, invisível para os outros.
+model DocumentPlacement {
+  documentId String
+  userId     String
+  folderId   String
+  createdAt  DateTime @default(now())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder     Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, userId])
+  @@index([folderId])
+  @@index([userId])
 }
 
 /// Versão congelada do documento (SPEC-005 §2.1). Apagar o documento de vez

@@ -1,9 +1,16 @@
-import type { DocumentList, DocumentSummary, DocumentType } from '@diagram/shared';
+import type { DocumentList, DocumentSummary, DocumentType, FolderKind, FolderNode, FolderTree } from '@diagram/shared';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Button, ErrorText, Field, Input, Modal, relativeTime, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
+import {
+  FolderDialog,
+  type FolderDialogState,
+  FolderMembersDialog,
+  FolderMenuDialog,
+} from '../folders/FolderDialogs';
+import { FolderBreadcrumb, findFolderPath, FolderSidebar, SEM_PASTA, useFolders } from '../folders/FolderSidebar';
 
 type Scope = 'mine' | 'shared' | 'trash';
 
@@ -55,12 +62,23 @@ export function DashboardPage() {
   const [renaming, setRenaming] = useState<DocumentSummary | null>(null);
   const [creating, setCreating] = useState<DocumentType | null>(null);
 
+  // Pastas (SPEC-004 §5.1). A pasta aberta fica na URL, para o link valer.
+  const folderId = params.get('pasta');
+  const folders = useFolders();
+  const path = findFolderPath(folders.data, folderId === SEM_PASTA ? null : folderId);
+  const currentFolder = path.at(-1) ?? null;
+  const [folderDialog, setFolderDialog] = useState<FolderDialogState | null>(null);
+  const [folderMenu, setFolderMenu] = useState<FolderNode | null>(null);
+  const [folderMembers, setFolderMembers] = useState<FolderNode | null>(null);
+  const [movingDoc, setMovingDoc] = useState<DocumentSummary | null>(null);
+
   const list = useInfiniteQuery({
-    queryKey: ['documents', scope, q, typeFilter.value],
+    queryKey: ['documents', scope, q, typeFilter.value, folderId],
     queryFn: ({ pageParam }) => {
       const sp = new URLSearchParams({ scope });
       if (q) sp.set('q', q);
       if (typeFilter.value) sp.set('type', typeFilter.value);
+      if (folderId) sp.set('folder', folderId);
       if (pageParam) sp.set('cursor', pageParam);
       return api<DocumentList>(`/documents?${sp}`);
     },
@@ -68,21 +86,65 @@ export function DashboardPage() {
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['documents'] });
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['documents'] });
+    qc.invalidateQueries({ queryKey: ['folders'] });
+  };
   const action = useMutation({
     mutationFn: ({ path, method }: { path: string; method: 'POST' | 'DELETE' }) =>
       api(path, { method, ...(method === 'POST' ? { json: {} } : {}) }),
     onSuccess: invalidate,
   });
 
+  /** Move um documento para uma pasta (ou para fora, com `null`). */
+  const move = useMutation({
+    mutationFn: ({ documentId, folder }: { documentId: string; folder: FolderNode | null; kind?: FolderKind }) => {
+      const kind = folder?.kind ?? 'PERSONAL';
+      const route = kind === 'SHARED' ? 'shared-folder' : 'personal-folder';
+      return api(`/documents/${documentId}/${route}`, { method: 'PUT', json: { folderId: folder?.id ?? null } });
+    },
+    onSuccess: invalidate,
+  });
+
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
 
+  const sidebar = (
+    <FolderSidebar
+      tree={folders.data}
+      loading={folders.isPending}
+      selectedId={folderId}
+      onSelect={(id) => setParam('pasta', id)}
+      onCreate={(kind, parentId) => setFolderDialog({ mode: 'create', kind, parentId })}
+      onManage={setFolderMenu}
+      onDropDocument={(documentId, folder) => move.mutate({ documentId, folder })}
+    />
+  );
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+      <aside className="lg:w-60 lg:shrink-0">
+        <details className="lg:hidden" open={false}>
+          <summary className="cursor-pointer py-2 text-sm font-medium">Pastas</summary>
+          <div className="pt-2">{sidebar}</div>
+        </details>
+        <div className="hidden lg:block lg:sticky lg:top-6">{sidebar}</div>
+      </aside>
+
+    <div className="flex min-w-0 flex-1 flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="font-display text-2xl font-semibold tracking-tight">Documentos</h1>
         <NewMenu onPick={setCreating} />
       </div>
+
+      {currentFolder && (
+        <FolderBreadcrumb
+          path={path}
+          onSelect={(id) => setParam('pasta', id)}
+          onNewFolder={() =>
+            setFolderDialog({ mode: 'create', kind: currentFolder.kind, parentId: currentFolder.id })
+          }
+        />
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line">
         <div role="tablist" className="-mb-px flex gap-1">
@@ -142,7 +204,9 @@ export function DashboardPage() {
               key={doc.id}
               doc={doc}
               scope={scope}
+              searching={!!q}
               onRename={() => setRenaming(doc)}
+              onMove={() => setMovingDoc(doc)}
               onAction={(path, method) => action.mutate({ path, method })}
               onOpen={() => navigate(`/m/${doc.id}`)}
             />
@@ -158,8 +222,40 @@ export function DashboardPage() {
         </div>
       )}
 
-      <CreateDialog type={creating} onClose={() => setCreating(null)} />
+      <CreateDialog
+        type={creating}
+        folder={currentFolder}
+        onClose={() => setCreating(null)}
+        onCreated={invalidate}
+      />
       <RenameDialog doc={renaming} onClose={() => setRenaming(null)} onDone={invalidate} />
+      <FolderDialog state={folderDialog} onClose={() => setFolderDialog(null)} />
+      <FolderMenuDialog
+        folder={folderMenu}
+        onClose={() => setFolderMenu(null)}
+        onRename={() => {
+          setFolderDialog({ mode: 'rename', kind: folderMenu!.kind, parentId: folderMenu!.parentId, folder: folderMenu! });
+          setFolderMenu(null);
+        }}
+        onMembers={() => {
+          setFolderMembers(folderMenu);
+          setFolderMenu(null);
+        }}
+        onDeleted={() => {
+          if (folderId === folderMenu?.id) setParam('pasta', null);
+        }}
+      />
+      <FolderMembersDialog folder={folderMembers} onClose={() => setFolderMembers(null)} />
+      <MoveDialog
+        doc={movingDoc}
+        tree={folders.data}
+        onClose={() => setMovingDoc(null)}
+        onMove={(folder) => {
+          move.mutate({ documentId: movingDoc!.id, folder });
+          setMovingDoc(null);
+        }}
+      />
+    </div>
     </div>
   );
 }
@@ -187,13 +283,18 @@ function EmptyState({ scope, searching, onCreate }: { scope: Scope; searching: b
 function DocumentCard({
   doc,
   scope,
+  searching,
   onRename,
+  onMove,
   onAction,
   onOpen,
 }: {
   doc: DocumentSummary;
   scope: Scope;
+  /** Na busca, mostra em que pasta o resultado está (SPEC-004 §5.1). */
+  searching: boolean;
   onRename: () => void;
+  onMove: () => void;
   onAction: (path: string, method: 'POST' | 'DELETE') => void;
   onOpen: () => void;
 }) {
@@ -201,7 +302,14 @@ function DocumentCard({
   const inTrash = scope === 'trash';
 
   return (
-    <li className="group flex flex-col rounded-xl border border-line bg-surface transition hover:border-muted/40 hover:shadow-sm">
+    <li
+      draggable={!inTrash}
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/x-paglamp-document', doc.id);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      className="group flex flex-col rounded-xl border border-line bg-surface transition hover:border-muted/40 hover:shadow-sm"
+    >
       {inTrash ? (
         <div className="flex-1 p-4">
           <p className="flex items-center gap-2 font-medium">
@@ -220,6 +328,7 @@ function DocumentCard({
             {scope === 'shared' ? `${doc.owner.name} · ${ROLE_LABEL[doc.myRole]} · ` : ''}
             editado {relativeTime(doc.updatedAt)}
           </p>
+          {searching && doc.folder && <p className="mt-1 text-xs text-muted">em {doc.folder.name}</p>}
         </Link>
       )}
       <div className="flex flex-wrap gap-1 border-t border-line px-2 py-1.5 text-xs">
@@ -241,6 +350,7 @@ function DocumentCard({
           <>
             <CardAction onClick={onOpen}>Abrir</CardAction>
             {canEdit && <CardAction onClick={onRename}>Renomear</CardAction>}
+            <CardAction onClick={onMove}>Mover para…</CardAction>
             <CardAction onClick={() => onAction(`/documents/${doc.id}/duplicate`, 'POST')}>Duplicar</CardAction>
             {doc.myRole === 'OWNER' && (
               <CardAction danger onClick={() => onAction(`/documents/${doc.id}/trash`, 'POST')}>
@@ -348,15 +458,37 @@ export function TypeIcon({ type, className = '' }: { type: DocumentType; classNa
   );
 }
 
-function CreateDialog({ type, onClose }: { type: DocumentType | null; onClose: () => void }) {
+function CreateDialog({
+  type,
+  folder,
+  onClose,
+  onCreated,
+}: {
+  type: DocumentType | null;
+  /** Pasta aberta: o documento novo já nasce nela (PRD-004 §5.6). */
+  folder: FolderNode | null;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
   const [title, setTitle] = useState('');
   const navigate = useNavigate();
   useEffect(() => {
     if (type) setTitle('');
   }, [type]);
   const create = useMutation({
-    mutationFn: () => api<DocumentSummary>('/documents', { method: 'POST', json: { title: title.trim(), type } }),
-    onSuccess: (doc) => navigate(`/m/${doc.id}`),
+    mutationFn: async () => {
+      const doc = await api<DocumentSummary>('/documents', { method: 'POST', json: { title: title.trim(), type } });
+      if (folder) {
+        const route = folder.kind === 'SHARED' ? 'shared-folder' : 'personal-folder';
+        // Se guardar na pasta falhar, o documento já existe: ele fica em "sem pasta".
+        await api(`/documents/${doc.id}/${route}`, { method: 'PUT', json: { folderId: folder.id } }).catch(() => {});
+      }
+      return doc;
+    },
+    onSuccess: (doc) => {
+      onCreated();
+      navigate(`/m/${doc.id}`);
+    },
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -414,6 +546,68 @@ function RenameDialog({ doc, onClose, onDone }: { doc: DocumentSummary | null; o
           </Button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+/** "Mover para…" (SPEC-004 §5.1). Compartilhadas só aparecem para o dono do documento. */
+function MoveDialog({
+  doc,
+  tree,
+  onClose,
+  onMove,
+}: {
+  doc: DocumentSummary | null;
+  tree: FolderTree | undefined;
+  onClose: () => void;
+  onMove: (folder: FolderNode | null) => void;
+}) {
+  const isOwner = doc?.myRole === 'OWNER';
+  const flatten = (nodes: FolderNode[], depth = 0): Array<{ node: FolderNode; depth: number }> =>
+    nodes.flatMap((node) => [{ node, depth }, ...flatten(node.children, depth + 1)]);
+
+  const personal = flatten(tree?.personal ?? []);
+  const shared = flatten(tree?.shared ?? []).filter(
+    ({ node }) => node.myRole === 'OWNER' || node.myRole === 'EDITOR',
+  );
+
+  return (
+    <Modal open={!!doc} onClose={onClose} title={`Mover "${doc?.title ?? ''}"`}>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <p className="text-xs font-medium tracking-wide text-muted uppercase">Minhas pastas</p>
+          <Button onClick={() => onMove(null)}>Sem pasta</Button>
+          {personal.map(({ node, depth }) => (
+            <Button key={node.id} className="justify-start" onClick={() => onMove(node)}>
+              <span style={{ paddingLeft: depth * 12 }}>{node.name}</span>
+            </Button>
+          ))}
+          {personal.length === 0 && <p className="text-sm text-muted">Você ainda não criou pastas.</p>}
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <p className="text-xs font-medium tracking-wide text-muted uppercase">Pastas compartilhadas</p>
+          {isOwner ? (
+            shared.length > 0 ? (
+              shared.map(({ node, depth }) => (
+                <Button key={node.id} className="justify-start" onClick={() => onMove(node)}>
+                  <span style={{ paddingLeft: depth * 12 }}>{node.name}</span>
+                </Button>
+              ))
+            ) : (
+              <p className="text-sm text-muted">Você não participa de nenhuma pasta compartilhada como editor.</p>
+            )
+          ) : (
+            <p className="text-sm text-muted">
+              Só o dono do documento pode colocá-lo numa pasta compartilhada.
+            </p>
+          )}
+        </div>
+
+        <div className="flex justify-end">
+          <Button onClick={onClose}>Cancelar</Button>
+        </div>
+      </div>
     </Modal>
   );
 }

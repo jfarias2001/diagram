@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | **Aprovado** (2026-09-22) |
+| Status | **Implementado** (2026-09-22) |
 | PRD | [PRD-004](../prd/PRD-004-pastas.md) |
 | Data | 2026-09-22 |
 

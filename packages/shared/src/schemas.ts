@@ -78,6 +78,8 @@ export const listDocumentsQuerySchema = z.object({
   type: documentTypeSchema.optional(),
   q: z.string().trim().max(100).optional(),
   cursor: z.string().max(64).optional(),
+  /** Id de uma pasta, ou 'none' para "sem pasta" (SPEC-004 §3.3). */
+  folder: z.string().min(1).max(64).optional(),
 });
 
 export const createDocumentBodySchema = z.object({
@@ -96,6 +98,8 @@ export interface DocumentSummary {
   owner: { id: string; name: string };
   updatedAt: string;
   trashedAt: string | null;
+  /** Pasta em que ELE está para mim: a compartilhada, senão a minha pessoal (SPEC-004 §3.3). */
+  folder?: { id: string; name: string; kind: 'PERSONAL' | 'SHARED' } | null;
 }
 
 export interface DocumentList {

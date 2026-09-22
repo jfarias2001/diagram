@@ -274,6 +274,42 @@ describe('WebSocket /collab', () => {
     expect(readNodes(decodeDoc(new Uint8Array(snapshot.state))).auto?.text).toContain('Editado por quem tem papel');
   });
 
+  it('acesso herdado da pasta vale no WebSocket, e sair da pasta derruba (SPEC-004 §4)', async () => {
+    const { id, owner, outsider } = await setup();
+    // Sem vínculo nenhum: o documento não existe para ela.
+    const antes = connect(outsider.cookie, id);
+    await waitFor(() => antes.state.failed !== null);
+    expect(antes.state.failed).toBe('not-found');
+
+    const pasta = (await call(app, owner.cookie, 'POST', '/folders', { kind: 'SHARED', name: 'Setor' })).json()
+      .id as string;
+    expect((await call(app, owner.cookie, 'PUT', `/documents/${id}/shared-folder`, { folderId: pasta })).statusCode).toBe(204);
+    expect(
+      (await call(app, owner.cookie, 'POST', `/folders/${pasta}/members`, {
+        email: outsider.user.email,
+        role: 'VIEWER',
+      })).statusCode,
+    ).toBe(201);
+
+    // Agora entra, mas só de leitura: o que ela escrever é descartado.
+    const leitora = connect(outsider.cookie, id);
+    await waitFor(() => leitora.state.synced && leitora.state.readOnly !== null);
+    expect(leitora.state.readOnly).toBe(true);
+
+    const dona = connect(owner.cookie, id);
+    await waitFor(() => dona.state.synced);
+    addNode(leitora.doc, { id: 'invasor', parentId: 'root', text: 'não deveria entrar' });
+    await new Promise((r) => setTimeout(r, 800));
+    expect(readNodes(dona.doc).invasor).toBeUndefined();
+    expect((await storedNodes(id)).invasor).toBeUndefined();
+
+    // Tirando o documento da pasta, ela perde o acesso e não volta.
+    await call(app, owner.cookie, 'PUT', `/documents/${id}/shared-folder`, { folderId: null });
+    const depois = connect(outsider.cookie, id);
+    await waitFor(() => depois.state.failed !== null);
+    expect(depois.state.failed).toBe('not-found');
+  });
+
   it('fluxograma: editor desenha, colega recebe, busca encontra; leitor forjando é descartado (SPEC-003 §7)', async () => {
     const { owner, editor, viewer } = await setup();
     const id = (await call(app, owner.cookie, 'POST', '/documents', { title: 'Fluxo', type: 'DIAGRAM' })).json().id as string;
