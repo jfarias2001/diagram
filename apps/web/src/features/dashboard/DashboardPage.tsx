@@ -1,7 +1,29 @@
-import type { DocumentList, DocumentSummary, DocumentType, FolderKind, FolderNode, FolderTree } from '@diagram/shared';
+import {
+  DOC_THEMES,
+  type DocumentList,
+  type DocumentSummary,
+  type DocumentType,
+  type FolderKind,
+  type FolderNode,
+  type FolderTree,
+  type ThemeId,
+} from '@diagram/shared';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { navButtonClass, SidebarSection, useSidebarSlot } from '../../components/AppShell';
+import {
+  IconDocs,
+  IconFlow,
+  IconGridView,
+  IconListView,
+  IconMindMap,
+  IconMore,
+  IconSearch,
+  IconShared,
+  IconTrashDoc,
+} from '../../components/icons';
 import { Button, ErrorText, Field, Input, Modal, relativeTime, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
 import {
@@ -15,11 +37,32 @@ import { FolderBreadcrumb, findFolderPath, FolderSidebar, SEM_PASTA, useFolders 
 type Scope = 'mine' | 'shared' | 'trash';
 
 // SPEC-003 §5.1: o painel lista os dois tipos de documento.
-const TABS: Array<{ scope: Scope; label: string }> = [
-  { scope: 'mine', label: 'Meus documentos' },
-  { scope: 'shared', label: 'Compartilhados comigo' },
-  { scope: 'trash', label: 'Lixeira' },
+// SPEC-008 §5.3: os escopos saíram das abas e viraram itens da lateral escura.
+const TABS: Array<{ scope: Scope; label: string; icon: typeof IconDocs }> = [
+  { scope: 'mine', label: 'Meus documentos', icon: IconDocs },
+  { scope: 'shared', label: 'Compartilhados comigo', icon: IconShared },
+  { scope: 'trash', label: 'Lixeira', icon: IconTrashDoc },
 ];
+
+/** Modo de exibição da lista, lembrado no navegador (SPEC-008 §5.3). */
+type View = 'grid' | 'list';
+const VIEW_KEY = 'paglamp.view';
+
+function readView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid';
+  } catch {
+    return 'grid'; // navegador com storage bloqueado não quebra o painel
+  }
+}
+
+function writeView(view: View) {
+  try {
+    localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    // sem storage: a escolha vale só nesta aba
+  }
+}
 
 const TYPE_FILTERS: Array<{ value: DocumentType | null; param: string | null; label: string }> = [
   { value: null, param: null, label: 'Todos' },
@@ -61,6 +104,8 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const [renaming, setRenaming] = useState<DocumentSummary | null>(null);
   const [creating, setCreating] = useState<DocumentType | null>(null);
+  const [view, setView] = useState<View>(readView);
+  const slot = useSidebarSlot();
 
   // Pastas (SPEC-004 §5.1). A pasta aberta fica na URL, para o link valer.
   const folderId = params.get('pasta');
@@ -109,30 +154,46 @@ export function DashboardPage() {
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
 
   const sidebar = (
-    <FolderSidebar
-      tree={folders.data}
-      loading={folders.isPending}
-      selectedId={folderId}
-      onSelect={(id) => setParam('pasta', id)}
-      onCreate={(kind, parentId) => setFolderDialog({ mode: 'create', kind, parentId })}
-      onManage={setFolderMenu}
-      onDropDocument={(documentId, folder) => move.mutate({ documentId, folder })}
-    />
+    <>
+      <nav aria-label="Seções" className="flex flex-col gap-0.5 text-sm">
+        {TABS.map((t) => (
+          <button
+            key={t.scope}
+            type="button"
+            aria-current={scope === t.scope}
+            onClick={() => setParam('aba', t.scope === 'mine' ? null : t.scope)}
+            className={navButtonClass(scope === t.scope)}
+          >
+            <t.icon size={17} />
+            {t.label}
+          </button>
+        ))}
+      </nav>
+      <SidebarSection title="Pastas">
+        <FolderSidebar
+          tree={folders.data}
+          loading={folders.isPending}
+          selectedId={folderId}
+          onSelect={(id) => setParam('pasta', id)}
+          onCreate={(kind, parentId) => setFolderDialog({ mode: 'create', kind, parentId })}
+          onManage={setFolderMenu}
+          onDropDocument={(documentId, folder) => move.mutate({ documentId, folder })}
+        />
+      </SidebarSection>
+    </>
   );
 
-  return (
-    <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
-      <aside className="lg:w-60 lg:shrink-0">
-        <details className="lg:hidden" open={false}>
-          <summary className="cursor-pointer py-2 text-sm font-medium">Pastas</summary>
-          <div className="pt-2">{sidebar}</div>
-        </details>
-        <div className="hidden lg:block lg:sticky lg:top-6">{sidebar}</div>
-      </aside>
+  const currentTab = TABS.find((t) => t.scope === scope) ?? TABS[0]!;
 
+  return (
     <div className="flex min-w-0 flex-1 flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <h1 className="font-display text-2xl font-semibold tracking-tight">Documentos</h1>
+      {/* A navegação do painel mora na lateral escura do shell (SPEC-008 §5.3). */}
+      {slot && createPortal(sidebar, slot)}
+
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="font-display text-2xl font-semibold tracking-tight">
+          {scope === 'mine' ? 'Documentos' : currentTab.label}
+        </h1>
         <NewMenu onPick={setCreating} />
       </div>
 
@@ -146,47 +207,60 @@ export function DashboardPage() {
         />
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line">
-        <div role="tablist" className="-mb-px flex gap-1">
-          {TABS.map((t) => (
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por tipo">
+          {TYPE_FILTERS.map((t) => (
             <button
-              key={t.scope}
-              role="tab"
+              key={t.label}
               type="button"
-              aria-selected={scope === t.scope}
-              onClick={() => setParam('aba', t.scope === 'mine' ? null : t.scope)}
-              className={`border-b-2 px-3 py-2.5 text-sm font-medium transition ${
-                scope === t.scope ? 'border-filament text-ink' : 'border-transparent text-muted hover:text-ink'
+              aria-pressed={typeFilter === t}
+              onClick={() => setParam('tipo', t.param)}
+              className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition ${
+                typeFilter === t
+                  ? 'border-transparent bg-brand text-on-brand'
+                  : 'border-line bg-surface text-muted hover:text-ink'
               }`}
             >
               {t.label}
             </button>
           ))}
         </div>
-        <Input
-          type="search"
-          placeholder="Buscar por título ou texto"
-          aria-label="Buscar documentos"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="mb-2 max-w-72"
-        />
-      </div>
 
-      <div className="-mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por tipo">
-        {TYPE_FILTERS.map((t) => (
-          <button
-            key={t.label}
-            type="button"
-            aria-pressed={typeFilter === t}
-            onClick={() => setParam('tipo', t.param)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-              typeFilter === t ? 'border-ink bg-ink text-canvas' : 'border-line text-muted hover:text-ink'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+        <div className="relative ml-auto">
+          <IconSearch size={16} className="absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
+          <Input
+            type="search"
+            placeholder="Buscar por título ou texto"
+            aria-label="Buscar documentos"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-64 pl-9"
+          />
+        </div>
+
+        <div className="flex items-center gap-0.5 rounded-lg border border-line bg-surface p-0.5">
+          {([
+            ['grid', 'Ver em cartões', IconGridView],
+            ['list', 'Ver em lista', IconListView],
+          ] as const).map(([value, label, Icon]) => (
+            <button
+              key={value}
+              type="button"
+              aria-label={label}
+              title={label}
+              aria-pressed={view === value}
+              onClick={() => {
+                setView(value);
+                writeView(value);
+              }}
+              className={`rounded-md p-1.5 transition ${
+                view === value ? 'bg-surface-2 text-ink' : 'text-muted hover:text-ink'
+              }`}
+            >
+              <Icon size={17} />
+            </button>
+          ))}
+        </div>
       </div>
 
       <ErrorText error={list.error ?? action.error} />
@@ -198,11 +272,18 @@ export function DashboardPage() {
       ) : items.length === 0 ? (
         <EmptyState scope={scope} searching={!!q || !!typeFilter.value} onCreate={() => setCreating('MINDMAP')} />
       ) : (
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul
+          className={
+            view === 'grid'
+              ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'
+              : 'flex flex-col divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface'
+          }
+        >
           {items.map((doc) => (
-            <DocumentCard
+            <DocumentItem
               key={doc.id}
               doc={doc}
+              view={view}
               scope={scope}
               searching={!!q}
               onRename={() => setRenaming(doc)}
@@ -256,7 +337,6 @@ export function DashboardPage() {
         }}
       />
     </div>
-    </div>
   );
 }
 
@@ -280,8 +360,17 @@ function EmptyState({ scope, searching, onCreate }: { scope: Scope; searching: b
   );
 }
 
-function DocumentCard({
+/** Capa do cartão: cores do tema do documento (SPEC-008 §5.3) — lista fechada. */
+export function coverStyle(theme: ThemeId | null | undefined) {
+  const doc = (theme && DOC_THEMES[theme]) || DOC_THEMES.paglamp;
+  const from = doc.rootColor;
+  const to = doc.branches[0] ?? doc.rootColor;
+  return { background: `linear-gradient(135deg, ${from}, ${to})` };
+}
+
+function DocumentItem({
   doc,
+  view,
   scope,
   searching,
   onRename,
@@ -290,6 +379,7 @@ function DocumentCard({
   onOpen,
 }: {
   doc: DocumentSummary;
+  view: View;
   scope: Scope;
   /** Na busca, mostra em que pasta o resultado está (SPEC-004 §5.1). */
   searching: boolean;
@@ -300,79 +390,154 @@ function DocumentCard({
 }) {
   const canEdit = doc.myRole === 'OWNER' || doc.myRole === 'EDITOR';
   const inTrash = scope === 'trash';
+  const Icon = doc.type === 'MINDMAP' ? IconMindMap : IconFlow;
+
+  const actions: Array<{ label: string; run: () => void; danger?: boolean }> = inTrash
+    ? [
+        { label: 'Restaurar', run: () => onAction(`/documents/${doc.id}/restore`, 'POST') },
+        {
+          label: 'Apagar de vez',
+          danger: true,
+          run: () => {
+            if (window.confirm(`Apagar "${doc.title}" de vez? Não dá para desfazer.`)) {
+              onAction(`/documents/${doc.id}`, 'DELETE');
+            }
+          },
+        },
+      ]
+    : [
+        { label: 'Abrir', run: onOpen },
+        ...(canEdit ? [{ label: 'Renomear', run: onRename }] : []),
+        { label: 'Mover para…', run: onMove },
+        { label: 'Duplicar', run: () => onAction(`/documents/${doc.id}/duplicate`, 'POST') },
+        ...(doc.myRole === 'OWNER'
+          ? [
+              {
+                label: 'Mover para a lixeira',
+                danger: true,
+                run: () => onAction(`/documents/${doc.id}/trash`, 'POST'),
+              },
+            ]
+          : []),
+      ];
+
+  const meta = inTrash
+    ? `Na lixeira desde ${relativeTime(doc.trashedAt ?? doc.updatedAt)}`
+    : `${scope === 'shared' ? `${doc.owner.name} · ${ROLE_LABEL[doc.myRole]} · ` : ''}editado ${relativeTime(doc.updatedAt)}`;
+
+  const dragProps = {
+    draggable: !inTrash,
+    onDragStart: (e: React.DragEvent) => {
+      e.dataTransfer.setData('text/x-paglamp-document', doc.id);
+      e.dataTransfer.effectAllowed = 'move';
+    },
+  };
+
+  if (view === 'list') {
+    return (
+      <li {...dragProps} className="group flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2">
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
+          style={coverStyle(doc.theme)}
+          aria-hidden
+        >
+          <Icon size={18} />
+        </span>
+        <span className="min-w-0 flex-1">
+          {inTrash ? (
+            <span className="block truncate font-medium">{doc.title}</span>
+          ) : (
+            <Link to={`/m/${doc.id}`} className="block truncate font-medium hover:underline">
+              {doc.title}
+            </Link>
+          )}
+          <span className="block truncate text-xs text-muted">
+            {meta}
+            {searching && doc.folder ? ` · em ${doc.folder.name}` : ''}
+          </span>
+        </span>
+        <span className="hidden shrink-0 text-xs text-muted sm:block">{TYPE_LABEL[doc.type]}</span>
+        <CardMenu title={doc.title} actions={actions} />
+      </li>
+    );
+  }
 
   return (
     <li
-      draggable={!inTrash}
-      onDragStart={(e) => {
-        e.dataTransfer.setData('text/x-paglamp-document', doc.id);
-        e.dataTransfer.effectAllowed = 'move';
-      }}
-      className="group flex flex-col rounded-xl border border-line bg-surface transition hover:border-muted/40 hover:shadow-sm"
+      {...dragProps}
+      className="group flex flex-col overflow-hidden rounded-xl border border-line bg-surface transition hover:border-brand/40 hover:shadow-md"
     >
-      {inTrash ? (
-        <div className="flex-1 p-4">
-          <p className="flex items-center gap-2 font-medium">
-            <TypeIcon type={doc.type} />
-            {doc.title}
-          </p>
-          <p className="mt-1 text-xs text-muted">Na lixeira desde {relativeTime(doc.trashedAt ?? doc.updatedAt)}</p>
-        </div>
-      ) : (
-        <Link to={`/m/${doc.id}`} className="flex-1 rounded-t-xl p-4">
-          <p className="flex items-center gap-2 font-medium">
-            <TypeIcon type={doc.type} />
-            <span className="group-hover:underline">{doc.title}</span>
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            {scope === 'shared' ? `${doc.owner.name} · ${ROLE_LABEL[doc.myRole]} · ` : ''}
-            editado {relativeTime(doc.updatedAt)}
-          </p>
-          {searching && doc.folder && <p className="mt-1 text-xs text-muted">em {doc.folder.name}</p>}
-        </Link>
-      )}
-      <div className="flex flex-wrap gap-1 border-t border-line px-2 py-1.5 text-xs">
-        {inTrash ? (
-          <>
-            <CardAction onClick={() => onAction(`/documents/${doc.id}/restore`, 'POST')}>Restaurar</CardAction>
-            <CardAction
-              danger
-              onClick={() => {
-                if (window.confirm(`Apagar "${doc.title}" de vez? Não dá para desfazer.`)) {
-                  onAction(`/documents/${doc.id}`, 'DELETE');
-                }
-              }}
-            >
-              Apagar de vez
-            </CardAction>
-          </>
-        ) : (
-          <>
-            <CardAction onClick={onOpen}>Abrir</CardAction>
-            {canEdit && <CardAction onClick={onRename}>Renomear</CardAction>}
-            <CardAction onClick={onMove}>Mover para…</CardAction>
-            <CardAction onClick={() => onAction(`/documents/${doc.id}/duplicate`, 'POST')}>Duplicar</CardAction>
-            {doc.myRole === 'OWNER' && (
-              <CardAction danger onClick={() => onAction(`/documents/${doc.id}/trash`, 'POST')}>
-                Mover para a lixeira
-              </CardAction>
-            )}
-          </>
-        )}
+      <div className="relative flex h-24 items-center justify-center text-white/90" style={coverStyle(doc.theme)}>
+        <Icon size={34} />
+        <span className="absolute top-2 left-2 rounded-md bg-black/25 px-2 py-0.5 text-[11px] font-medium backdrop-blur">
+          {TYPE_LABEL[doc.type]}
+        </span>
+      </div>
+      <div className="flex flex-1 items-start gap-2 p-3.5">
+        <span className="min-w-0 flex-1">
+          {inTrash ? (
+            <span className="block truncate font-medium">{doc.title}</span>
+          ) : (
+            <Link to={`/m/${doc.id}`} className="block truncate font-medium hover:underline">
+              {doc.title}
+            </Link>
+          )}
+          <span className="mt-1 block truncate text-xs text-muted">{meta}</span>
+          {searching && doc.folder && <span className="block truncate text-xs text-muted">em {doc.folder.name}</span>}
+        </span>
+        <CardMenu title={doc.title} actions={actions} />
       </div>
     </li>
   );
 }
 
-function CardAction({ children, onClick, danger }: { children: string; onClick: () => void; danger?: boolean }) {
+/** Menu "⋯" do documento: as mesmas ações de antes, agora sem poluir o cartão. */
+function CardMenu({ title, actions }: { title: string; actions: Array<{ label: string; run: () => void; danger?: boolean }> }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [open]);
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-md px-2 py-1 font-medium hover:bg-surface-2 ${danger ? 'text-danger' : 'text-muted hover:text-ink'}`}
-    >
-      {children}
-    </button>
+    <div ref={ref} className="relative shrink-0" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
+      <button
+        type="button"
+        aria-label={`Ações de ${title}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="rounded-md p-1.5 text-muted transition hover:bg-surface-2 hover:text-ink"
+      >
+        <IconMore size={16} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute top-full right-0 z-20 mt-1 flex w-48 flex-col rounded-xl border border-line bg-surface p-1 shadow-lg"
+        >
+          {actions.map((a) => (
+            <button
+              key={a.label}
+              role="menuitem"
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                a.run();
+              }}
+              className={`rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-2 ${a.danger ? 'text-danger' : ''}`}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -394,7 +559,7 @@ function NewMenu({ onPick }: { onPick: (type: DocumentType) => void }) {
   return (
     <div ref={ref} className="relative" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
       <Button variant="primary" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        + Novo
+        + Criar
       </Button>
       {open && (
         <div role="menu" className="absolute right-0 z-20 mt-2 flex w-60 flex-col rounded-xl border border-line bg-surface p-1 shadow-lg">
@@ -423,38 +588,11 @@ function NewMenu({ onPick }: { onPick: (type: DocumentType) => void }) {
 }
 
 export function TypeIcon({ type, className = '' }: { type: DocumentType; className?: string }) {
+  const Icon = type === 'MINDMAP' ? IconMindMap : IconFlow;
   return (
-    <svg
-      role="img"
-      aria-label={TYPE_LABEL[type]}
-      width={16}
-      height={16}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={`shrink-0 text-muted ${className}`}
-    >
-      {type === 'MINDMAP' ? (
-        <>
-          <circle cx="12" cy="12" r="3" />
-          <circle cx="4" cy="5" r="2" />
-          <circle cx="20" cy="5" r="2" />
-          <circle cx="4" cy="19" r="2" />
-          <circle cx="20" cy="19" r="2" />
-          <path d="M9.5 10.5 5.6 6.4M14.5 10.5l3.9-4.1M9.5 13.5l-3.9 4.1M14.5 13.5l3.9 4.1" />
-        </>
-      ) : (
-        <>
-          <rect x="7" y="2" width="10" height="5" rx="1.5" />
-          <path d="M12 7v3M12 10l4 3.5-4 3.5-4-3.5z" />
-          <path d="M12 17v2" />
-          <rect x="7" y="19" width="10" height="3" rx="1" />
-        </>
-      )}
-    </svg>
+    <span role="img" aria-label={TYPE_LABEL[type]} className={`shrink-0 text-muted ${className}`}>
+      <Icon size={18} />
+    </span>
   );
 }
 

@@ -9,8 +9,10 @@ import {
   type MindMapNode,
   moveSibling,
   type NodeRecord,
+  type NodeSide,
   readableInk,
   reparentNode,
+  resolveSides,
   setNodeOffsets,
   updateNode,
 } from '@diagram/shared';
@@ -142,6 +144,12 @@ export function MindMapCanvas({
   );
 
   const index = useMemo(() => childrenIndex(nodes), [nodes]);
+  const rootId = useMemo(() => findRoot(nodes)?.id ?? null, [nodes]);
+  /** Lado de cada ramo de 1º nível (SPEC-008 §2.2) — quem já tem, manda. */
+  const branchSides = useMemo(
+    () => resolveSides(rootId ? (index.get(rootId) ?? []) : []),
+    [index, rootId],
+  );
   // Layout automático + deslocamentos manuais (SPEC-006 §2.2), com a folga da
   // fonte em uso (SPEC-007 §5.4).
   const positions = useMemo(
@@ -351,11 +359,11 @@ export function MindMapCanvas({
   // continua no mesmo passo da criação.
   const newStep = () => undo?.stopCapturing();
 
-  const createNode = (parentId: string, afterId?: string) => {
+  const createNode = (parentId: string, afterId?: string, side?: NodeSide) => {
     const id = crypto.randomUUID();
     pendingRef.current = '';
     newStep();
-    if (addNode(doc, { id, parentId, afterId }, LOCAL_ORIGIN)) {
+    if (addNode(doc, { id, parentId, afterId, side }, LOCAL_ORIGIN)) {
       onSelect(id);
       setEditing({ id, draft: '' });
       focusCanvas(); // guarda as teclas até o campo do nó novo ganhar foco
@@ -381,7 +389,9 @@ export function MindMapCanvas({
     createSibling: (id) => {
       const node = nodes[id];
       if (!canEdit || !node) return;
-      if (node.parentId) createNode(node.parentId, node.id);
+      // SPEC-008 §5.5: o irmão nasce do MESMO lado, logo abaixo — nunca do
+      // outro lado da raiz, como acontecia antes.
+      if (node.parentId) createNode(node.parentId, node.id, branchSides.get(node.id));
       else createNode(node.id); // na raiz, irmão vira filho
     },
     removeNode: (id) => {
@@ -567,9 +577,13 @@ export function MindMapCanvas({
 
     if (target && node.parentId !== null) {
       // Troca de pai: o bloco volta à posição automática sob o novo pai, e tudo
-      // numa transação só (SPEC-007 §5.2).
+      // numa transação só (SPEC-007 §5.2). Soltar na raiz define o lado pelo
+      // ponto em que se soltou (SPEC-008 §5.5).
       newStep();
-      reparentNode(doc, dragged.id, target, LOCAL_ORIGIN);
+      const rootPos = rootId ? posById.get(rootId) : undefined;
+      const side: NodeSide | undefined =
+        target === rootId && rootPos ? (dragged.position.x < rootPos.x ? 'left' : 'right') : undefined;
+      reparentNode(doc, dragged.id, target, LOCAL_ORIGIN, side);
       return;
     }
     const to = { x: dragged.position.x, y: dragged.position.y };
@@ -696,6 +710,7 @@ export function MindMapCanvas({
             hasChildren={(index.get(selectedNode.id)?.length ?? 0) > 0}
             siblingCount={selectedNode.parentId ? (index.get(selectedNode.parentId)?.length ?? 0) : 0}
             branchMoved={branchIds(nodes, selectedNode.id).some((bid) => nodes[bid]?.dx !== undefined)}
+            side={posById.get(selectedNode.id)?.side ?? 'root'}
             actions={actions}
           />
         )}

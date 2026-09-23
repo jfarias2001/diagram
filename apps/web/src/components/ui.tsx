@@ -10,8 +10,10 @@ import {
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
+// SPEC-008 §5.1: a ação principal é o degradê azul→violeta da marca.
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-ink text-canvas hover:opacity-90',
+  primary:
+    'bg-[linear-gradient(120deg,var(--brand),var(--brand-2))] text-on-brand shadow-sm hover:brightness-110',
   secondary: 'border border-line bg-surface text-ink hover:bg-surface-2',
   ghost: 'text-ink hover:bg-surface-2',
   danger: 'bg-danger text-white hover:opacity-90',
@@ -74,7 +76,7 @@ export function Field({
 }
 
 const inputClass =
-  'h-10 min-w-0 rounded-lg border border-line bg-surface px-3 text-sm text-ink placeholder:text-muted focus:border-filament focus:outline-none';
+  'h-10 min-w-0 rounded-lg border border-line bg-surface px-3 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none';
 
 /** Ocupa a largura toda, salvo quando `className` define outra. */
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
@@ -140,7 +142,7 @@ export function ErrorText({ error }: { error: unknown }) {
   );
 }
 
-/** Marca: um nó central "aceso" com três ramos. */
+/** Marca: um nó central com três ramos, na cor de ação (SPEC-008 §5.1). */
 export function Logo({ size = 28 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden>
@@ -148,8 +150,8 @@ export function Logo({ size = 28 }: { size?: number }) {
       <circle cx="6" cy="8" r="3" fill="currentColor" />
       <circle cx="26" cy="8" r="3" fill="currentColor" />
       <circle cx="16" cy="27" r="3" fill="currentColor" />
-      <circle cx="16" cy="16" r="7" fill="var(--filament-soft)" />
-      <circle cx="16" cy="16" r="4.5" fill="var(--filament)" />
+      <circle cx="16" cy="16" r="7" fill="var(--brand-soft)" />
+      <circle cx="16" cy="16" r="4.5" fill="var(--brand)" />
     </svg>
   );
 }

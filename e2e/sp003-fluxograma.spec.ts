@@ -84,6 +84,12 @@ async function connect(page: Page, from: string, to: string | { x: number; y: nu
   await page.mouse.up();
 }
 
+/** Ação que mora no menu em grade da forma (SPEC-008 §5.4). */
+async function shapeMenuAction(page: Page, name: string | RegExp) {
+  await page.getByRole('button', { name: 'Mais ações' }).click();
+  await page.getByRole('menu').getByRole('menuitem', { name }).click();
+}
+
 test('fluxograma: paleta, setas, organizar, colar e leitor só lê', async ({ browser }) => {
   const admin = await newPage(browser);
   await loginAdmin(admin);
@@ -91,8 +97,8 @@ test('fluxograma: paleta, setas, organizar, colar e leitor só lê', async ({ br
   const brunoTemp = await createUser(admin, 'Bruno Editor', 'bruno@gmail.com');
 
   // Novo fluxograma pelo menu do painel.
-  await admin.getByRole('link', { name: 'Documentos' }).click();
-  await admin.getByRole('button', { name: '+ Novo' }).click();
+  await admin.goto('/');
+  await admin.getByRole('button', { name: '+ Criar' }).click();
   await admin.getByRole('menuitem', { name: /Fluxograma/ }).click();
   await admin.getByLabel('Título').fill('Fluxo de pedido');
   await admin.getByRole('button', { name: 'Criar fluxograma' }).click();
@@ -142,7 +148,7 @@ test('fluxograma: paleta, setas, organizar, colar e leitor só lê', async ({ br
   await expect(admin.locator('dialog').getByText('Bruno Editor')).toBeVisible();
   await admin.getByRole('button', { name: 'Fechar' }).click();
 
-  await bruno.getByRole('tab', { name: 'Compartilhados comigo' }).click();
+  await bruno.getByRole('button', { name: 'Compartilhados comigo' }).click();
   await bruno.getByRole('link', { name: /Fluxo de pedido/ }).click();
   await expect(shape(bruno, 'Faturar')).toBeVisible();
   await shape(bruno, 'Faturar').dblclick();
@@ -152,7 +158,7 @@ test('fluxograma: paleta, setas, organizar, colar e leitor só lê', async ({ br
 
   // 6) Apagar a decisão apaga as setas dela; Ctrl+Z traz tudo de volta.
   await shape(admin, /Crédito aprovado/).click();
-  await admin.getByRole('button', { name: 'Apagar (Delete)' }).click();
+  await shapeMenuAction(admin, /Apagar/);
   await expect(shape(admin, /Crédito aprovado/)).toHaveCount(0);
   await expect(admin.locator('.react-flow__edge')).toHaveCount(0);
   await admin.getByRole('button', { name: 'Desfazer (Ctrl+Z)' }).click();
@@ -192,7 +198,7 @@ test('fluxograma: paleta, setas, organizar, colar e leitor só lê', async ({ br
   await admin.getByRole('button', { name: 'Adicionar', exact: true }).click();
   await admin.getByRole('button', { name: 'Fechar' }).click();
 
-  await carla.getByRole('tab', { name: 'Compartilhados comigo' }).click();
+  await carla.getByRole('button', { name: 'Compartilhados comigo' }).click();
   await carla.getByRole('link', { name: /Fluxo de pedido/ }).click();
   await expect(carla.getByText('Somente leitura')).toBeVisible();
   await expect(carla.getByRole('complementary', { name: 'Formas' })).toHaveCount(0);

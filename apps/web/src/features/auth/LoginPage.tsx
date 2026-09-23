@@ -31,8 +31,14 @@ export function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-full items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
+    <main className="relative flex min-h-full items-center justify-center overflow-hidden px-4 py-12">
+      {/* Brilho da marca no fundo (SPEC-008 §5.1): dá profundidade sem imagem. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-40 left-1/2 h-[420px] w-[720px] -translate-x-1/2 rounded-full opacity-25 blur-3xl"
+        style={{ background: 'linear-gradient(120deg, var(--brand), var(--brand-2))' }}
+      />
+      <div className="relative w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <Logo size={48} />
           <h1 className="font-display text-2xl font-semibold tracking-tight">Paglamp Diagram</h1>

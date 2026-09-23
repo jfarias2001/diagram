@@ -7,8 +7,8 @@ import { Link } from 'react-router';
 import { Avatar, Button, colorFor } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useMe } from '../auth/session';
-import { exportCanvasPng } from './exportPng';
-import { IconTheme } from './icons';
+import { IconExport, IconHistory, IconShare, IconTheme } from '../../components/icons';
+import { ExportDialog } from '../export/ExportDialog';
 import { ShareDialog } from './ShareDialog';
 import type { CollabState, SaveStatus } from './useCollab';
 
@@ -58,6 +58,7 @@ export function EditorHeader({
           <Presence provider={provider} />
           {onToggleHistory && (
             <Button aria-pressed={historyOpen} onClick={onToggleHistory}>
+              <IconHistory />
               Histórico
             </Button>
           )}
@@ -67,6 +68,7 @@ export function EditorHeader({
           </Button>
           <ExportButton title={meta.title} />
           <Button variant="primary" onClick={() => setSharing(true)}>
+            <IconShare />
             Compartilhar
           </Button>
         </div>
@@ -110,14 +112,14 @@ function TitleField({ meta, canEdit }: { meta: DocumentSummary; canEdit: boolean
           e.currentTarget.blur();
         }
       }}
-      className="min-w-0 max-w-md flex-1 truncate rounded-md border border-transparent bg-transparent px-2 py-1 font-display text-base font-semibold hover:border-line focus:border-filament focus:outline-none"
+      className="min-w-0 max-w-md flex-1 truncate rounded-md border border-transparent bg-transparent px-2 py-1 font-display text-base font-semibold hover:border-line focus:border-brand focus:outline-none"
     />
   );
 }
 
 const STATUS: Record<SaveStatus, { label: string; dot: string }> = {
   connecting: { label: 'Conectando…', dot: 'bg-muted' },
-  saving: { label: 'Salvando…', dot: 'bg-filament' },
+  saving: { label: 'Salvando…', dot: 'bg-brand' },
   saved: { label: 'Salvo', dot: 'bg-ok' },
   offline: { label: 'Offline — as alterações serão enviadas ao reconectar', dot: 'bg-danger' },
 };
@@ -164,23 +166,18 @@ function Presence({ provider }: { provider: HocuspocusProvider }) {
   );
 }
 
+/** Abre o diálogo de exportação: PNG ou PDF, com tamanho e orientação (SPEC-008 §5.6). */
 function ExportButton({ title }: { title: string }) {
   const { getNodes } = useReactFlow();
-  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
   return (
-    <Button
-      busy={busy}
-      onClick={async () => {
-        setBusy(true);
-        try {
-          await exportCanvasPng(getNodes(), title);
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      Exportar PNG
-    </Button>
+    <>
+      <Button onClick={() => setOpen(true)}>
+        <IconExport />
+        Exportar
+      </Button>
+      <ExportDialog open={open} title={title} nodes={open ? getNodes() : []} onClose={() => setOpen(false)} />
+    </>
   );
 }
 

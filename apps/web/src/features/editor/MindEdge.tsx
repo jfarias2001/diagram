@@ -1,6 +1,6 @@
 import { type Edge, EdgeLabelRenderer, type EdgeProps } from '@xyflow/react';
 import { memo } from 'react';
-import { IconScissors } from './icons';
+import { IconScissors } from '../../components/icons';
 import { taperedPath } from './taper';
 
 // Ligação do mapa mental (SPEC-007 §5.5): traço preenchido que sai grosso do

@@ -17,6 +17,7 @@ import {
   repairTree,
   setNodeOffset,
   setNodeOffsets,
+  setNodeSide,
   updateNode,
 } from './ydoc.js';
 
@@ -244,24 +245,28 @@ describe('posição livre (SPEC-006 §2)', () => {
 });
 
 describe('ordem entre irmãos (SPEC-006 §5.2)', () => {
+  // Fora da raiz, todos os irmãos contam. Na raiz, só os do mesmo lado — a
+  // diferença está no bloco da SPEC-008 §2.3, mais abaixo.
   it('sobe e desce um irmão', () => {
     const doc = sampleDoc();
-    addNode(doc, { id: 'c', parentId: 'root' });
-    const order = () => childrenIndex(readNodes(doc)).get('root')!.map((n) => n.id);
-    expect(order()).toEqual(['a', 'b', 'c']);
+    addNode(doc, { id: 'a2', parentId: 'a' });
+    addNode(doc, { id: 'a3', parentId: 'a' });
+    const order = () => childrenIndex(readNodes(doc)).get('a')!.map((n) => n.id);
+    expect(order()).toEqual(['a1', 'a2', 'a3']);
 
-    expect(moveSibling(doc, 'c', 'up')).toBe(true);
-    expect(order()).toEqual(['a', 'c', 'b']);
-    expect(moveSibling(doc, 'c', 'up')).toBe(true);
-    expect(order()).toEqual(['c', 'a', 'b']);
-    expect(moveSibling(doc, 'c', 'down')).toBe(true);
-    expect(order()).toEqual(['a', 'c', 'b']);
+    expect(moveSibling(doc, 'a3', 'up')).toBe(true);
+    expect(order()).toEqual(['a1', 'a3', 'a2']);
+    expect(moveSibling(doc, 'a3', 'up')).toBe(true);
+    expect(order()).toEqual(['a3', 'a1', 'a2']);
+    expect(moveSibling(doc, 'a3', 'down')).toBe(true);
+    expect(order()).toEqual(['a1', 'a3', 'a2']);
   });
 
   it('recusa nas pontas, na raiz e em nó inexistente', () => {
     const doc = sampleDoc();
-    expect(moveSibling(doc, 'a', 'up')).toBe(false);
-    expect(moveSibling(doc, 'b', 'down')).toBe(false);
+    addNode(doc, { id: 'a2', parentId: 'a' });
+    expect(moveSibling(doc, 'a1', 'up')).toBe(false);
+    expect(moveSibling(doc, 'a2', 'down')).toBe(false);
     expect(moveSibling(doc, 'root', 'up')).toBe(false);
     expect(moveSibling(doc, 'fantasma', 'up')).toBe(false);
   });
@@ -431,5 +436,119 @@ describe('cor do texto do bloco (SPEC-007 §2.2)', () => {
     updateNode(doc, 'a', { ink: '#112233' }, LOCAL);
     updateNode(doc, 'a', { ink: '' }, LOCAL);
     expect(readNodes(doc).a!.ink).toBeUndefined();
+  });
+});
+
+// ---------- SPEC-008 §2.3: lado do ramo gravado no documento ----------
+
+describe('lado do ramo (SPEC-008 §2.3)', () => {
+  it('ramo de 1º nível nasce com lado; filho de outro nó não recebe lado', () => {
+    const doc = createMindMapDoc('Raiz');
+    addNode(doc, { id: 'a', parentId: 'root', text: 'A' });
+    addNode(doc, { id: 'a1', parentId: 'a', text: 'A1' });
+    const nodes = readNodes(doc);
+    expect(nodes.a?.side).toBe('right');
+    expect(nodes.a1?.side).toBeUndefined();
+  });
+
+  it('irmão criado depois de um ramo nasce do MESMO lado (o bug do PRD-008 §1)', () => {
+    const doc = createMindMapDoc('Raiz');
+    addNode(doc, { id: 'a', parentId: 'root', text: 'A' });
+    addNode(doc, { id: 'b', parentId: 'root', afterId: 'a', text: 'B' });
+    addNode(doc, { id: 'c', parentId: 'root', afterId: 'b', text: 'C' });
+    const nodes = readNodes(doc);
+    expect([nodes.a?.side, nodes.b?.side, nodes.c?.side]).toEqual(['right', 'right', 'right']);
+  });
+
+  it('sem irmão de referência, equilibra os lados', () => {
+    const doc = createMindMapDoc('Raiz');
+    addNode(doc, { id: 'a', parentId: 'root' });
+    addNode(doc, { id: 'b', parentId: 'root' });
+    addNode(doc, { id: 'c', parentId: 'root' });
+    const nodes = readNodes(doc);
+    expect([nodes.a?.side, nodes.b?.side, nodes.c?.side]).toEqual(['right', 'left', 'right']);
+  });
+
+  it('congela o lado dos ramos antigos numa transação só (um Ctrl+Z desfaz)', () => {
+    // Documento "antigo": três ramos escritos sem lado nenhum.
+    const doc = createMindMapDoc('Raiz');
+    const map = nodesMap(doc);
+    for (const [id, order] of [['a', 1], ['b', 2], ['c', 3]] as const) {
+      const y = new Y.Map<unknown>();
+      y.set('parentId', 'root');
+      y.set('order', order);
+      y.set('text', id);
+      map.set(id, y);
+    }
+    expect(Object.values(readNodes(doc)).every((n) => n.side === undefined)).toBe(true);
+
+    let transactions = 0;
+    doc.on('afterTransaction', () => {
+      transactions += 1;
+    });
+    addNode(doc, { id: 'd', parentId: 'root', afterId: 'c' });
+    expect(transactions).toBe(1);
+
+    const nodes = readNodes(doc);
+    // a e b estavam à direita e c à esquerda pela regra antiga — e ficam onde estavam.
+    expect([nodes.a?.side, nodes.b?.side, nodes.c?.side]).toEqual(['right', 'right', 'left']);
+    expect(nodes.d?.side).toBe('left'); // herdou de c
+  });
+
+  it('lado forjado no Y.Map não é lido', () => {
+    const doc = sampleDoc();
+    nodesMap(doc).get('a')?.set('side', 'atras-do-pai');
+    expect(readNodes(doc).a?.side).toBeUndefined();
+  });
+
+  it('virar filho da raiz dá lado; sair da raiz tira o lado', () => {
+    const doc = createMindMapDoc('Raiz');
+    addNode(doc, { id: 'a', parentId: 'root' });
+    addNode(doc, { id: 'a1', parentId: 'a' });
+    expect(readNodes(doc).a1?.side).toBeUndefined();
+    moveNode(doc, 'a1', 'root', undefined);
+    expect(readNodes(doc).a1?.side).toBe('left');
+    moveNode(doc, 'a1', 'a', undefined);
+    expect(readNodes(doc).a1?.side).toBeUndefined();
+  });
+
+  it('reparentNode para a raiz aceita o lado pedido (arrastar para o outro lado)', () => {
+    const doc = createMindMapDoc('Raiz');
+    addNode(doc, { id: 'a', parentId: 'root' });
+    addNode(doc, { id: 'a1', parentId: 'a' });
+    reparentNode(doc, 'a1', 'root', LOCAL, 'left');
+    expect(readNodes(doc).a1?.side).toBe('left');
+  });
+
+  it('setNodeSide troca o lado só de filho direto da raiz', () => {
+    const doc = createMindMapDoc('Raiz');
+    addNode(doc, { id: 'a', parentId: 'root' });
+    addNode(doc, { id: 'a1', parentId: 'a' });
+    expect(setNodeSide(doc, 'a', 'left', LOCAL)).toBe(true);
+    expect(readNodes(doc).a?.side).toBe('left');
+    expect(setNodeSide(doc, 'a1', 'left', LOCAL)).toBe(false);
+    expect(setNodeSide(doc, 'root', 'left', LOCAL)).toBe(false);
+    expect(setNodeSide(doc, 'a', 'left', LOCAL)).toBe(false); // já está nesse lado
+  });
+
+  it('mover para cima/baixo na raiz só considera os irmãos do mesmo lado', () => {
+    const doc = createMindMapDoc('Raiz');
+    addNode(doc, { id: 'r1', parentId: 'root', side: 'right' });
+    addNode(doc, { id: 'l1', parentId: 'root', side: 'left' });
+    addNode(doc, { id: 'r2', parentId: 'root', afterId: 'r1', side: 'right' });
+    // r2 está à direita, abaixo de r1: subir troca com r1, não com o bloco da esquerda.
+    expect(moveSibling(doc, 'r2', 'up', LOCAL)).toBe(true);
+    const nodes = readNodes(doc);
+    expect((nodes.r2?.order ?? 0) < (nodes.r1?.order ?? 0)).toBe(true);
+    expect(nodes.l1?.side).toBe('left');
+    // O primeiro da direita não tem para onde subir.
+    expect(moveSibling(doc, 'r2', 'up', LOCAL)).toBe(false);
+  });
+
+  it('o lado viaja entre dois clientes pelo Yjs', () => {
+    const a = createMindMapDoc('Raiz');
+    addNode(a, { id: 'x', parentId: 'root', side: 'left' });
+    const b = fork(a);
+    expect(readNodes(b).x?.side).toBe('left');
   });
 });

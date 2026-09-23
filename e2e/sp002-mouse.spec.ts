@@ -43,6 +43,12 @@ async function loginAdmin(page: Page) {
 
 const node = (page: Page, text: string | RegExp) => page.locator('.react-flow__node').filter({ hasText: text });
 
+/** Ação que mora no menu em grade do bloco (SPEC-008 §5.4). */
+async function menuAction(page: Page, name: string | RegExp) {
+  await page.getByRole('button', { name: 'Mais ações' }).click();
+  await page.getByRole('menu').getByRole('menuitem', { name }).click();
+}
+
 test('mapa só com o mouse: barra, "+", duplo clique, nota e link; leitor só lê', async ({ browser }) => {
   const admin = await newPage(browser);
   await loginAdmin(admin);
@@ -59,8 +65,8 @@ test('mapa só com o mouse: barra, "+", duplo clique, nota e link; leitor só l�
   await admin.getByRole('button', { name: 'Pronto' }).click();
 
   // Mapa novo.
-  await admin.getByRole('link', { name: 'Documentos' }).click();
-  await admin.getByRole('button', { name: '+ Novo' }).click();
+  await admin.goto('/');
+  await admin.getByRole('button', { name: '+ Criar' }).click();
   await admin.getByRole('menuitem', { name: /Mapa mental/ }).click();
   await admin.getByLabel('Título').fill('Compras pelo mouse');
   await admin.getByRole('button', { name: 'Criar mapa' }).click();
@@ -106,14 +112,14 @@ test('mapa só com o mouse: barra, "+", duplo clique, nota e link; leitor só l�
   await expect(node(admin, 'Fornecedores 2027').locator('> div')).toHaveCSS('border-color', 'rgb(47, 158, 68)');
 
   // 4) Nota.
-  await admin.getByRole('button', { name: 'Adicionar nota' }).click();
+  await menuAction(admin, /Nota/);
   await admin.getByLabel('Texto da nota').fill('Negociar prazo com a zebraquinta');
   await admin.getByRole('button', { name: 'Fechar nota (Esc)' }).click();
   await expect(node(admin, 'Fornecedores 2027').getByRole('button', { name: 'Ver nota' })).toBeVisible();
 
   // 5) Link: javascript: é recusado; endereço sem protocolo vira https.
   await node(admin, 'Fornecedores 2027').click();
-  await admin.getByRole('button', { name: 'Adicionar link' }).click();
+  await menuAction(admin, /Link/);
   await admin.getByLabel('Endereço do link').fill('javascript:alert(1)');
   await admin.getByRole('button', { name: 'Salvar' }).click();
   await expect(admin.getByRole('alert')).toContainText('Link inválido');
@@ -125,14 +131,14 @@ test('mapa só com o mouse: barra, "+", duplo clique, nota e link; leitor só l�
 
   // 6) Recolher / expandir pela barra.
   await node(admin, 'Fornecedores 2027').click();
-  await admin.getByRole('button', { name: 'Recolher ramo (Espaço)' }).click();
+  await menuAction(admin, /Recolher/);
   await expect(node(admin, 'Cotação')).toBeHidden();
-  await admin.getByRole('button', { name: 'Expandir ramo (Espaço)' }).click();
+  await menuAction(admin, /Expandir/);
   await expect(node(admin, 'Cotação')).toBeVisible();
 
   // 7) Apagar pela barra e desfazer pelo botão.
   await node(admin, 'Contrato').click();
-  await admin.getByRole('button', { name: 'Apagar tópico e seus filhos (Delete)' }).click();
+  await menuAction(admin, /Apagar/);
   await expect(node(admin, 'Contrato')).toBeHidden();
   await admin.getByRole('button', { name: 'Desfazer (Ctrl+Z)' }).click();
   await expect(node(admin, 'Contrato')).toBeVisible();
@@ -161,7 +167,7 @@ test('mapa só com o mouse: barra, "+", duplo clique, nota e link; leitor só l�
   const bia = await newPage(browser);
   await login(bia, 'bia@gmail.com', biaTemp);
   await choosePassword(bia, biaTemp, 'senha da bia 2026');
-  await bia.getByRole('tab', { name: 'Compartilhados comigo' }).click();
+  await bia.getByRole('button', { name: 'Compartilhados comigo' }).click();
   await bia.getByRole('link', { name: /Compras pelo mouse/ }).click();
   await expect(bia.getByText('Somente leitura')).toBeVisible();
   await node(bia, 'Fornecedores 2027').click();

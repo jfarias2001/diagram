@@ -57,7 +57,7 @@ test('pasta compartilhada: entrar dá acesso a tudo, sair tira na hora', async (
   await admin.getByRole('button', { name: 'Pronto' }).click();
 
   // Pasta compartilhada e um documento dentro dela.
-  await admin.getByRole('link', { name: 'Documentos' }).click();
+  await admin.goto('/');
   await admin.getByRole('button', { name: 'Criar pasta em Pastas compartilhadas' }).click();
   await admin.getByLabel('Nome').fill('Comercial');
   await admin.getByRole('button', { name: 'Salvar' }).click();
@@ -65,7 +65,7 @@ test('pasta compartilhada: entrar dá acesso a tudo, sair tira na hora', async (
   await expect(pasta).toBeVisible();
   await pasta.click();
 
-  await admin.getByRole('button', { name: '+ Novo' }).click();
+  await admin.getByRole('button', { name: '+ Criar' }).click();
   await admin.getByRole('menuitem', { name: /Mapa mental/ }).click();
   await admin.getByLabel('Título').fill('Tabela de preços');
   await admin.getByRole('button', { name: 'Criar mapa' }).click();

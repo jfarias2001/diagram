@@ -100,7 +100,7 @@ function LabelEditor({ initial, onDone }: { initial: string; onDone: (label: str
       maxLength={EDGE_LABEL_MAX}
       aria-label="Texto do conector"
       size={Math.max(4, value.length)}
-      className="nodrag nopan rounded border border-filament bg-surface px-1.5 py-0.5 text-center text-xs text-ink outline-none"
+      className="nodrag nopan rounded border border-brand bg-surface px-1.5 py-0.5 text-center text-xs text-ink outline-none"
       onChange={(e) => setValue(e.target.value)}
       onBlur={() => finish(value)}
       onKeyDown={(e) => {

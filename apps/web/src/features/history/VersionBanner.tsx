@@ -46,7 +46,7 @@ export function VersionBanner({
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center gap-3 border-b border-filament bg-filament/15 px-4 py-2 text-sm"
+      className="flex flex-wrap items-center gap-3 border-b border-brand bg-brand/15 px-4 py-2 text-sm"
     >
       <span className="font-medium">
         Você está vendo a versão de {moment}

@@ -1,4 +1,4 @@
-import { childrenIndex, findRoot, type MindMapNode, type NodeShape } from '@diagram/shared';
+import { childrenIndex, findRoot, type MindMapNode, type NodeShape, resolveSides } from '@diagram/shared';
 import { hierarchy, tree } from 'd3-hierarchy';
 
 export type Side = 'root' | 'left' | 'right';
@@ -113,11 +113,13 @@ export function layoutMindMap(nodes: Record<string, MindMapNode>, widthFactor = 
     return item;
   };
 
+  // SPEC-008 §2.2: o lado de cada ramo é LIDO do documento, não recalculado a
+  // cada desenho — é o que impede um ramo de pular de lado quando outro nasce.
   const branches = root.collapsed ? [] : (index.get(root.id) ?? []);
-  const splitAt = Math.ceil(branches.length / 2);
+  const sideOf = resolveSides(branches);
   const sides: Array<[Exclude<Side, 'root'>, MindMapNode[]]> = [
-    ['right', branches.slice(0, splitAt)],
-    ['left', branches.slice(splitAt)],
+    ['right', branches.filter((b) => sideOf.get(b.id) !== 'left')],
+    ['left', branches.filter((b) => sideOf.get(b.id) === 'left')],
   ];
 
   const result: PositionedNode[] = [{ id: root.id, x: 0, y: 0, side: 'root' }];

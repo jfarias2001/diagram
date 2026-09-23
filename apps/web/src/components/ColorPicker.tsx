@@ -154,7 +154,7 @@ export function ColorPicker({ value, palette, label, onChange, onAuto, autoLabel
           placeholder="#aabbcc"
           maxLength={7}
           spellCheck={false}
-          className="nodrag h-8 w-24 rounded-lg border border-line bg-surface px-2 font-mono text-xs text-ink placeholder:text-muted focus:border-filament focus:outline-none"
+          className="nodrag h-8 w-24 rounded-lg border border-line bg-surface px-2 font-mono text-xs text-ink placeholder:text-muted focus:border-brand focus:outline-none"
         />
         {onAuto && (
           <button

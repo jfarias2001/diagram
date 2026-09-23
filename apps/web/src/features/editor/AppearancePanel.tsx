@@ -15,7 +15,7 @@ import type * as Y from 'yjs';
 import { ColorPicker } from '../../components/ColorPicker';
 import { type BoardTheme, mix } from './boardTheme';
 import { loadFont } from './fonts';
-import { IconClose } from './icons';
+import { IconClose } from '../../components/icons';
 import { LOCAL_ORIGIN } from './useMindMap';
 
 // Painel Aparência (SPEC-007 §5.3): tema, fonte e fundo do documento. Um só

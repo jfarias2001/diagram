@@ -32,6 +32,14 @@ export type NodeShape = (typeof NODE_SHAPES)[number];
 /** Limite de |dx| e |dy| do deslocamento manual (SPEC-006 §2.1). */
 export const NODE_OFFSET_MAX = 20_000;
 
+/**
+ * Lado do ramo no mapa mental (SPEC-008 §2.1). Só vale para filho direto da
+ * raiz; nos demais nós o layout ignora. Guardar o lado é o que impede um ramo
+ * de pular para o outro lado quando um irmão novo nasce.
+ */
+export const NODE_SIDES = ['left', 'right'] as const;
+export type NodeSide = (typeof NODE_SIDES)[number];
+
 export const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 /**
@@ -52,6 +60,8 @@ export const mindMapNodeSchema = z.object({
   dx: z.number().finite().min(-NODE_OFFSET_MAX).max(NODE_OFFSET_MAX).optional(),
   dy: z.number().finite().min(-NODE_OFFSET_MAX).max(NODE_OFFSET_MAX).optional(),
   shape: z.enum(NODE_SHAPES).optional(),
+  /** Lado do ramo (SPEC-008 §2.1). Só tem efeito em filho direto da raiz. */
+  side: z.enum(NODE_SIDES).optional(),
   /** Cor de preenchimento do bloco. Ausente = fundo do quadro. */
   fill: z.string().regex(HEX_COLOR).optional(),
   /** Cor do texto escolhida à mão (SPEC-007 §2.2). Ausente = cor sugerida. */

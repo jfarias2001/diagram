@@ -1,10 +1,18 @@
 import type { FolderKind, FolderNode, FolderTree } from '@diagram/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import {
+  IconChevronDown,
+  IconChevronRight,
+  IconFolder,
+  IconFolderPlus,
+  IconMore,
+} from '../../components/icons';
 import { Button, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
 
-// Lateral de pastas do painel (SPEC-004 §5.1).
+// Lateral de pastas do painel (SPEC-004 §5.1), agora desenhada dentro da
+// lateral escura do shell (SPEC-008 §5.3) — daí os tokens `nav-*`.
 
 export const SEM_PASTA = 'none';
 
@@ -46,14 +54,12 @@ export function FolderSidebar({
   onDropDocument: (documentId: string, folder: FolderNode) => void;
 }) {
   return (
-    <nav aria-label="Pastas" className="flex flex-col gap-5 text-sm">
-      <div className="flex flex-col gap-1">
-        <SidebarItem label="Todos os documentos" active={selectedId === null} onClick={() => onSelect(null)} />
-        <SidebarItem label="Sem pasta" active={selectedId === SEM_PASTA} onClick={() => onSelect(SEM_PASTA)} />
-      </div>
+    <nav aria-label="Pastas" className="flex flex-col gap-1 text-sm">
+      <SidebarItem label="Todas as pastas" active={selectedId === null} onClick={() => onSelect(null)} />
+      <SidebarItem label="Sem pasta" active={selectedId === SEM_PASTA} onClick={() => onSelect(SEM_PASTA)} />
 
       {loading ? (
-        <div className="flex justify-center py-4 text-muted">
+        <div className="flex justify-center py-4 text-nav-muted">
           <Spinner />
         </div>
       ) : (
@@ -104,21 +110,21 @@ function Section({
   onDropDocument: (documentId: string, folder: FolderNode) => void;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between gap-2 px-2">
-        <h2 className="text-xs font-medium tracking-wide text-muted uppercase">{title}</h2>
+    <div className="mt-4 flex flex-col gap-0.5">
+      <div className="flex items-center justify-between gap-2 px-3 pb-1">
+        <h2 className="text-[11px] font-semibold tracking-wider text-nav-muted uppercase">{title}</h2>
         <button
           type="button"
           onClick={() => onCreate(kind, null)}
           aria-label={`Criar pasta em ${title}`}
           title={`Criar pasta em ${title}`}
-          className="rounded-md px-1.5 text-muted hover:bg-surface-2 hover:text-ink"
+          className="rounded-md p-1 text-nav-muted hover:bg-white/10 hover:text-nav-ink"
         >
-          +
+          <IconFolderPlus size={15} />
         </button>
       </div>
       {nodes.length === 0 ? (
-        <p className="px-2 py-1 text-xs text-muted">
+        <p className="px-3 py-1 text-xs text-nav-muted">
           {kind === 'PERSONAL' ? 'Nenhuma pasta sua ainda.' : 'Nenhuma pasta compartilhada com você.'}
         </p>
       ) : (
@@ -176,7 +182,7 @@ function FolderRow({
           const documentId = e.dataTransfer.getData('text/x-paglamp-document');
           if (documentId) onDropDocument(documentId, node);
         }}
-        className={`group flex items-center gap-1 rounded-lg pr-1 ${over ? 'ring-2 ring-filament' : ''}`}
+        className={`group flex items-center gap-1 rounded-lg pr-1 ${over ? 'ring-2 ring-brand' : ''}`}
         style={{ paddingLeft: depth * 12 }}
       >
         {hasChildren ? (
@@ -185,9 +191,9 @@ function FolderRow({
             onClick={() => setOpen((o) => !o)}
             aria-label={open ? `Recolher ${node.name}` : `Expandir ${node.name}`}
             aria-expanded={open}
-            className="w-4 shrink-0 text-muted hover:text-ink"
+            className="flex w-4 shrink-0 justify-center text-nav-muted hover:text-nav-ink"
           >
-            {open ? '▾' : '▸'}
+            {open ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
           </button>
         ) : (
           <span className="w-4 shrink-0" aria-hidden />
@@ -197,20 +203,25 @@ function FolderRow({
           onClick={() => onSelect(node.id)}
           aria-current={selectedId === node.id}
           className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition ${
-            selectedId === node.id ? 'bg-surface-2 font-medium text-ink' : 'text-muted hover:bg-surface-2 hover:text-ink'
+            selectedId === node.id
+              ? 'bg-white/12 font-medium text-nav-ink'
+              : 'text-nav-muted hover:bg-white/8 hover:text-nav-ink'
           }`}
         >
+          <IconFolder size={15} className="shrink-0" />
           <span className="truncate">{node.name}</span>
-          {node.documentCount > 0 && <span className="ml-auto shrink-0 text-xs text-muted">{node.documentCount}</span>}
+          {node.documentCount > 0 && (
+            <span className="ml-auto shrink-0 text-xs text-nav-muted">{node.documentCount}</span>
+          )}
         </button>
         <button
           type="button"
           onClick={() => onManage(node)}
           aria-label={`Opções da pasta ${node.name}`}
           title="Opções da pasta"
-          className="shrink-0 rounded-md px-1.5 text-muted opacity-0 group-hover:opacity-100 hover:bg-surface-2 hover:text-ink focus:opacity-100"
+          className="shrink-0 rounded-md p-1 text-nav-muted opacity-0 group-hover:opacity-100 hover:bg-white/10 hover:text-nav-ink focus:opacity-100"
         >
-          ⋯
+          <IconMore size={15} />
         </button>
       </div>
       {open && hasChildren && (
@@ -239,8 +250,8 @@ function SidebarItem({ label, active, onClick }: { label: string; active: boolea
       type="button"
       onClick={onClick}
       aria-current={active}
-      className={`rounded-lg px-2 py-1.5 text-left transition ${
-        active ? 'bg-surface-2 font-medium text-ink' : 'text-muted hover:bg-surface-2 hover:text-ink'
+      className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition ${
+        active ? 'bg-white/12 font-medium text-nav-ink' : 'text-nav-muted hover:bg-white/8 hover:text-nav-ink'
       }`}
     >
       {label}

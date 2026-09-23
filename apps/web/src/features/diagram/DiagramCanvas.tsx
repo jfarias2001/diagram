@@ -691,6 +691,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
                   newStep();
                   updateShapes(doc, selection.shapes, { bold: !selectedShapes.every((s) => s.bold) }, LOCAL_ORIGIN);
                 },
+                duplicate: duplicateSelection,
                 remove: removeSelection,
               }}
             />
@@ -748,7 +749,7 @@ function Guides({ guides }: { guides: Guide[] }) {
       {guides.map((g, i) => (
         <div
           key={`${g.axis}-${g.pos}-${i}`}
-          className="export-hidden pointer-events-none absolute bg-filament"
+          className="export-hidden pointer-events-none absolute bg-brand"
           style={
             g.axis === 'v'
               ? { left: g.pos, top: g.from, width: 1, height: g.to - g.from }

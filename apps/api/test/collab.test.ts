@@ -9,6 +9,7 @@ import {
   readDiagram,
   readNodes,
   setNodeOffset,
+  setNodeSide,
   updateNode,
 } from '@diagram/shared';
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
@@ -104,6 +105,14 @@ async function storedState(id: string): Promise<Uint8Array> {
 
 async function storedNodes(id: string) {
   return readNodes(decodeDoc(await storedState(id)));
+}
+
+/** Coluna `theme`, derivada do documento pelo servidor (SPEC-008 §2.4). */
+async function storedTheme(id: string): Promise<string | null> {
+  app.collab.instance.flushPendingStores();
+  await new Promise((r) => setTimeout(r, 300));
+  const row = await app.prisma.document.findUniqueOrThrow({ where: { id }, select: { theme: true } });
+  return row.theme;
 }
 
 describe('WebSocket /collab', () => {
@@ -439,4 +448,66 @@ describe('WebSocket /collab', () => {
     await call(app, owner.cookie, 'POST', `/documents/${id}/trash`);
     await waitFor(() => e.state.failed === 'not-found');
   });
+
+  // ---------- SPEC-008 §6: lado do ramo e tema derivado ----------
+
+  it('leitor não troca o lado de um ramo forjando o WebSocket (SPEC-008 §6)', async () => {
+    const { id, owner, viewer } = await setup();
+    const a = connect(owner.cookie, id);
+    await waitFor(() => a.state.synced);
+    addNode(a.doc, { id: 'ramo', parentId: 'root', text: 'Ramo', side: 'right' });
+    await waitFor(async () => (await storedNodes(id)).ramo !== undefined);
+
+    const v = connect(viewer.cookie, id);
+    await waitFor(() => v.state.synced && v.state.readOnly === true);
+    setNodeSide(v.doc, 'ramo', 'left');
+    // Escrita crua, sem passar pelas funções do shared.
+    (v.doc.getMap('nodes').get('ramo') as Y.Map<unknown>).set('side', 'left');
+    await new Promise((r) => setTimeout(r, 800));
+
+    expect(readNodes(a.doc).ramo?.side).toBe('right');
+    expect((await storedNodes(id)).ramo?.side).toBe('right');
+  });
+
+  it('editor troca o lado e o colega recebe (SPEC-008 §4)', async () => {
+    const { id, owner, editor } = await setup();
+    const a = connect(owner.cookie, id);
+    const e = connect(editor.cookie, id);
+    await waitFor(() => a.state.synced && e.state.synced);
+
+    addNode(e.doc, { id: 'ramo', parentId: 'root', text: 'Ramo' });
+    await waitFor(() => readNodes(a.doc).ramo?.side === 'right');
+    setNodeSide(e.doc, 'ramo', 'left');
+    await waitFor(() => readNodes(a.doc).ramo?.side === 'left');
+    await waitFor(async () => (await storedNodes(id)).ramo?.side === 'left');
+  });
+
+  it('o tema do documento é copiado para a coluna que o painel lê (SPEC-008 §2.4)', async () => {
+    const { id, owner } = await setup();
+    const a = connect(owner.cookie, id);
+    await waitFor(() => a.state.synced);
+
+    // Antes de escolher tema, a coluna fica nula = tema padrão.
+    addNode(a.doc, { id: 'x', parentId: 'root', text: 'Algo' });
+    await waitFor(async () => (await storedNodes(id)).x !== undefined);
+    expect(await storedTheme(id)).toBeNull();
+    const before = await call(app, owner.cookie, 'GET', `/documents/${id}`);
+    expect(before.json().theme).toBeNull();
+
+    setDocumentStyle(a.doc, { theme: 'oceano' });
+    await waitFor(async () => (await storedTheme(id)) === 'oceano');
+
+    const after = await call(app, owner.cookie, 'GET', `/documents/${id}`);
+    expect(after.json().theme).toBe('oceano');
+    const list = await call(app, owner.cookie, 'GET', '/documents');
+    expect(list.json().items.find((d: { id: string }) => d.id === id).theme).toBe('oceano');
+  });
+
+  it('tema estranho guardado na coluna não chega ao painel (SPEC-008 §3)', async () => {
+    const { id, owner } = await setup();
+    await app.prisma.document.update({ where: { id }, data: { theme: '<script>' } });
+    const response = await call(app, owner.cookie, 'GET', `/documents/${id}`);
+    expect(response.json().theme).toBeNull();
+  });
+
 });

@@ -1,7 +1,7 @@
 import { Panel, useReactFlow } from '@xyflow/react';
 import { type ReactNode, useEffect, useState } from 'react';
 import type * as Y from 'yjs';
-import { IconFit, IconRedo, IconTidy, IconUndo, IconZoomIn, IconZoomOut } from './icons';
+import { IconFit, IconRedo, IconTidy, IconUndo, IconZoomIn, IconZoomOut } from '../../components/icons';
 
 // Controles do canto inferior esquerdo (SPEC-002 §5.7). Substituem o <Controls>.
 

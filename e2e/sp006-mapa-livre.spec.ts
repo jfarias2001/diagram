@@ -51,12 +51,18 @@ async function boxOf(page: Page, text: string) {
   return box;
 }
 
+/** Ação que mora no menu em grade do bloco (SPEC-008 §5.4). */
+async function menuAction(page: Page, name: string | RegExp) {
+  await page.getByRole('button', { name: 'Mais ações' }).click();
+  await page.getByRole('menu').getByRole('menuitem', { name }).click();
+}
+
 test('mapa: arrastar posiciona, organizar volta, formato e cor do bloco', async ({ browser }) => {
   const admin = await newPage(browser);
   await loginAdmin(admin);
 
-  await admin.getByRole('link', { name: 'Documentos' }).click();
-  await admin.getByRole('button', { name: '+ Novo' }).click();
+  await admin.goto('/');
+  await admin.getByRole('button', { name: '+ Criar' }).click();
   await admin.getByRole('menuitem', { name: /Mapa mental/ }).click();
   await admin.getByLabel('Título').fill('Mapa livre');
   await admin.getByRole('button', { name: 'Criar mapa' }).click();
@@ -95,7 +101,7 @@ test('mapa: arrastar posiciona, organizar volta, formato e cor do bloco', async 
 
   // 2) Formato e cor do bloco.
   await node(admin, 'Processos').click();
-  await admin.getByRole('button', { name: 'Formato do bloco' }).click();
+  await menuAction(admin, /Formato/);
   await admin.getByRole('button', { name: 'Elipse' }).click();
   await node(admin, 'Processos').click();
   await admin.getByRole('button', { name: 'Cores' }).click();

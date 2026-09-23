@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ThemeId } from './theme.js';
 import { documentTypeSchema, roleSchema } from './document.js';
 
 // SPEC-001 §3 — contratos da API compartilhados entre web e api.
@@ -100,6 +101,8 @@ export interface DocumentSummary {
   trashedAt: string | null;
   /** Pasta em que ELE está para mim: a compartilhada, senão a minha pessoal (SPEC-004 §3.3). */
   folder?: { id: string; name: string; kind: 'PERSONAL' | 'SHARED' } | null;
+  /** Tema do documento, para a capa do cartão (SPEC-008 §3). Nulo = tema padrão. */
+  theme?: ThemeId | null;
 }
 
 export interface DocumentList {

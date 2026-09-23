@@ -8,6 +8,8 @@ import {
   encodeDoc,
   idParamSchema,
   listDocumentsQuerySchema,
+  THEME_IDS,
+  type ThemeId,
   updateDocumentBodySchema,
 } from '@diagram/shared';
 import type { Prisma } from '@prisma/client';
@@ -27,6 +29,7 @@ const summarySelect = (userId: string) =>
     id: true,
     title: true,
     type: true,
+    theme: true,
     updatedAt: true,
     trashedAt: true,
     owner: { select: { id: true, name: true } },
@@ -137,7 +140,7 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     const { document } = await assertDocumentAccess(app.prisma, user.id, id, 'VIEWER');
     const source = await app.prisma.document.findUniqueOrThrow({
       where: { id },
-      select: { yState: true, searchText: true, type: true },
+      select: { yState: true, searchText: true, type: true, theme: true },
     });
     // Se o mapa está aberto, o estado em memória pode estar à frente do banco (debounce).
     const live = app.collab.liveState(id);
@@ -151,6 +154,7 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
         yState: state,
         sizeBytes: state?.byteLength ?? 0,
         searchText: source.searchText,
+        theme: source.theme,
         lastEditedById: user.id,
         members: { create: { userId: user.id, role: 'OWNER' } },
       },
@@ -217,6 +221,7 @@ type SummaryRow = {
   updatedAt: Date;
   trashedAt: Date | null;
   owner: { id: string; name: string };
+  theme: string | null;
   members: { role: DocumentSummary['myRole'] }[];
   sharedFolder: {
     id: string;
@@ -247,5 +252,7 @@ function toSummary(d: SummaryRow, userId: string): DocumentSummary {
     updatedAt: d.updatedAt.toISOString(),
     trashedAt: d.trashedAt?.toISOString() ?? null,
     folder: folderOf(d, userId),
+    // A coluna é derivada do documento, mas quem lê não confia nela (SPEC-008 §3).
+    theme: (THEME_IDS as readonly string[]).includes(d.theme ?? '') ? (d.theme as ThemeId) : null,
   };
 }

@@ -209,3 +209,43 @@ describe('estimateSize por fonte (SPEC-007 §5.4)', () => {
     expect(Math.abs(xA(largoCondensado))).toBeLessThanOrEqual(Math.abs(xA(largoPadrao)));
   });
 });
+
+// ---------- SPEC-008 §5.5: o lado do ramo é lido, não redividido ----------
+
+describe('lado do ramo no layout (SPEC-008)', () => {
+  const withSides = (...list: Array<[string, 'left' | 'right' | undefined]>) => {
+    const nodes = map(['root', null, 0], ...list.map(([id], at) => [id, 'root', at + 1] as [string, string, number]));
+    for (const [id, side] of list) if (side) nodes[id] = { ...nodes[id]!, side };
+    return nodes;
+  };
+
+  it('documento antigo (nenhum lado gravado) desenha como antes', () => {
+    const nodes = withSides(['a', undefined], ['b', undefined], ['c', undefined]);
+    const byId = Object.fromEntries(layoutMindMap(nodes).map((p) => [p.id, p]));
+    expect([byId.a?.side, byId.b?.side, byId.c?.side]).toEqual(['right', 'right', 'left']);
+  });
+
+  it('respeita o lado gravado em cada ramo', () => {
+    const nodes = withSides(['a', 'left'], ['b', 'left'], ['c', 'right']);
+    const byId = Object.fromEntries(layoutMindMap(nodes).map((p) => [p.id, p]));
+    expect([byId.a?.side, byId.b?.side, byId.c?.side]).toEqual(['left', 'left', 'right']);
+    expect(byId.a?.x).toBeLessThan(0);
+    expect(byId.c?.x).toBeGreaterThan(0);
+  });
+
+  it('o irmão novo fica do mesmo lado e ABAIXO — o bug do PRD-008 §1', () => {
+    const nodes = withSides(['a', 'right'], ['b', 'right']);
+    const byId = Object.fromEntries(layoutMindMap(nodes).map((p) => [p.id, p]));
+    expect(byId.b?.side).toBe('right');
+    expect(byId.b?.x).toBe(byId.a?.x);
+    expect(byId.b?.y).toBeGreaterThan(byId.a?.y ?? 0);
+  });
+
+  it('criar o quinto ramo não muda o lado de nenhum dos quatro', () => {
+    const four = withSides(['a', 'right'], ['b', 'right'], ['c', 'left'], ['d', 'left']);
+    const before = Object.fromEntries(layoutMindMap(four).map((p) => [p.id, p.side]));
+    const five = { ...four, e: { id: 'e', parentId: 'root', order: 5, text: 'e', side: 'right' as const } };
+    const after = Object.fromEntries(layoutMindMap(five).map((p) => [p.id, p.side]));
+    for (const id of ['a', 'b', 'c', 'd']) expect(after[id]).toBe(before[id]);
+  });
+});

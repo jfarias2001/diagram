@@ -1,7 +1,7 @@
 import { type MindMapNode, NODE_NOTE_MAX, updateNode } from '@diagram/shared';
 import { useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
-import { IconClose } from './icons';
+import { IconClose } from '../../components/icons';
 import { LOCAL_ORIGIN } from './useMindMap';
 
 // Painel lateral da nota do tópico selecionado (SPEC-002 §5.5).
@@ -107,7 +107,7 @@ function NoteEditor({ doc, nodeId, remote }: { doc: Y.Doc; nodeId: string; remot
             updateNode(doc, nodeId, { note: latest.current }, LOCAL_ORIGIN);
           }, SAVE_DELAY_MS);
         }}
-        className="min-h-0 flex-1 resize-none rounded-lg border border-line bg-surface p-3 text-sm leading-relaxed text-ink placeholder:text-muted focus:border-filament focus:outline-none"
+        className="min-h-0 flex-1 resize-none rounded-lg border border-line bg-surface p-3 text-sm leading-relaxed text-ink placeholder:text-muted focus:border-brand focus:outline-none"
       />
       <p className="text-right text-xs text-muted tabular-nums">
         {value.length.toLocaleString('pt-BR')} / {NODE_NOTE_MAX.toLocaleString('pt-BR')}

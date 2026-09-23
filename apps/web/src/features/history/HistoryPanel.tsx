@@ -3,7 +3,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import { useState } from 'react';
 import { Button, ErrorText, Input, relativeTime, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
-import { IconClose } from '../editor/icons';
+import { IconClose } from '../../components/icons';
 
 // Painel de histórico do documento (SPEC-005 §5.1). Todos os papéis veem;
 // só Editor e Dono criam e restauram.

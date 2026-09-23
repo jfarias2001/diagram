@@ -1,7 +1,7 @@
 import { NODE_TEXT_MAX, type NodeShape } from '@diagram/shared';
 import { Handle, type Node, type NodeProps, Position } from '@xyflow/react';
 import { memo, useEffect, useRef, useState } from 'react';
-import { IconLink, IconNote, IconPlus } from './icons';
+import { IconLink, IconNote, IconPlus } from '../../components/icons';
 import { SHAPE_PADDING, type Side } from './layout';
 
 export type MindNodeData = {
@@ -102,7 +102,7 @@ function ShapeBackground({ shape, fill, stroke, lit }: { shape: NodeShape; fill:
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
       className="pointer-events-none absolute inset-0 h-full w-full"
-      style={lit ? { filter: 'drop-shadow(0 0 6px var(--filament))' } : undefined}
+      style={lit ? { filter: 'drop-shadow(0 0 6px var(--brand))' } : undefined}
     >
       {shape === 'ellipse' ? (
         <ellipse cx="50" cy="50" rx="49" ry="48" {...common} />

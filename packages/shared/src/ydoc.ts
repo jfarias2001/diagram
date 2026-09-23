@@ -8,9 +8,12 @@ import {
   NODE_NOTE_MAX,
   NODE_OFFSET_MAX,
   NODE_SHAPES,
+  NODE_SIDES,
   NODE_TEXT_MAX,
   type NodeShape,
+  type NodeSide,
 } from './document.js';
+import { resolveSides, sideForNewBranch } from './sides.js';
 import { type DocumentStyle, documentStyleSchema, FONT_IDS, THEME_IDS } from './theme.js';
 import {
   branchIds,
@@ -65,6 +68,9 @@ function readNode(id: string, y: YNode): MindMapNode | null {
   if (typeof fill === 'string' && HEX_COLOR.test(fill)) node.fill = fill;
   const ink = y.get('ink');
   if (typeof ink === 'string' && HEX_COLOR.test(ink)) node.ink = ink;
+  // SPEC-008 §2.1: lado fora da lista fechada é lido como "sem lado".
+  const side = y.get('side');
+  if (typeof side === 'string' && (NODE_SIDES as readonly string[]).includes(side)) node.side = side as NodeSide;
   const offset = readOffset(y.get('dx'), y.get('dy'));
   if (offset) {
     node.dx = offset.dx;
@@ -100,6 +106,7 @@ function writeNode(map: Y.Map<YNode>, node: MindMapNode) {
   if (node.note) y.set('note', node.note.slice(0, NODE_NOTE_MAX));
   if (node.link && isSafeLink(node.link)) y.set('link', node.link);
   if (node.shape && (NODE_SHAPES as readonly string[]).includes(node.shape)) y.set('shape', node.shape);
+  if (node.side && (NODE_SIDES as readonly string[]).includes(node.side)) y.set('side', node.side);
   if (node.fill && HEX_COLOR.test(node.fill)) y.set('fill', node.fill);
   if (node.ink && HEX_COLOR.test(node.ink)) y.set('ink', node.ink);
   const offset = readOffset(node.dx, node.dy);
@@ -138,17 +145,39 @@ export interface AddNodeInput {
   /** Inserir logo depois deste irmão; sem ele, vai para o fim. */
   afterId?: string;
   text?: string;
+  /** Lado do ramo, quando o pai é a raiz (SPEC-008 §2.3). */
+  side?: NodeSide;
+}
+
+/**
+ * Congela o lado de cada filho da raiz que ainda não tem um (SPEC-008 §2.2).
+ * Chamado dentro da MESMA transação que cria um ramo novo: sem isso, o primeiro
+ * lado gravado mudaria o cálculo dos antigos e o mapa se remexeria uma vez.
+ * Deve rodar ANTES da escrita do nó novo, para não contar com ele.
+ */
+function freezeSides(map: Y.Map<YNode>, rootChildren: MindMapNode[]) {
+  const sides = resolveSides(rootChildren);
+  for (const child of rootChildren) {
+    if (child.side === 'left' || child.side === 'right') continue;
+    const side = sides.get(child.id);
+    if (side) map.get(child.id)?.set('side', side);
+  }
 }
 
 export function addNode(doc: Y.Doc, input: AddNodeInput, origin?: unknown): boolean {
   const nodes = readNodes(doc);
   if (!nodes[input.parentId] || nodes[input.id]) return false;
-  const siblings = childrenIndex(nodes).get(input.parentId) ?? [];
+  const index = childrenIndex(nodes);
+  const siblings = index.get(input.parentId) ?? [];
   const afterIndex = input.afterId ? siblings.findIndex((s) => s.id === input.afterId) : siblings.length - 1;
   const order = orderBetween(siblings[afterIndex]?.order, siblings[afterIndex + 1]?.order);
+  // Ramo de 1º nível nasce com lado: o do irmão de referência, ou o menos cheio.
+  const isBranch = findRoot(nodes)?.id === input.parentId;
+  const side = isBranch ? (input.side ?? sideForNewBranch(siblings, input.afterId)) : undefined;
   doc.transact(() => {
     const map = nodesMap(doc);
-    writeNode(map, { id: input.id, parentId: input.parentId, order, text: input.text ?? '' });
+    if (isBranch) freezeSides(map, siblings);
+    writeNode(map, { id: input.id, parentId: input.parentId, order, text: input.text ?? '', side });
     map.get(input.parentId)?.delete('collapsed'); // criar filho abre o ramo
   }, origin);
   return true;
@@ -219,6 +248,8 @@ export function moveNode(
   newParentId: string,
   afterId: string | null | undefined,
   origin?: unknown,
+  /** Lado, quando o destino é a raiz (SPEC-008 §2.3). */
+  side?: NodeSide,
 ): boolean {
   const nodes = readNodes(doc);
   const node = nodes[id];
@@ -228,10 +259,38 @@ export function moveNode(
   const afterIndex =
     afterId === undefined ? siblings.length - 1 : afterId === null ? -1 : siblings.findIndex((s) => s.id === afterId);
   const order = orderBetween(siblings[afterIndex]?.order, siblings[afterIndex + 1]?.order);
+  const toRoot = findRoot(nodes)?.id === newParentId;
+  const newSide = toRoot ? (side ?? sideForNewBranch(siblings, afterId ?? undefined)) : undefined;
   doc.transact(() => {
-    const y = nodesMap(doc).get(id);
+    const map = nodesMap(doc);
+    if (toRoot) freezeSides(map, siblings);
+    const y = map.get(id);
     y?.set('parentId', newParentId);
     y?.set('order', order);
+    // Virou ramo de 1º nível: ganha lado. Deixou de ser: o campo sai (§2.3).
+    if (newSide) y?.set('side', newSide);
+    else y?.delete('side');
+  }, origin);
+  return true;
+}
+
+/**
+ * Grava o lado de um ramo de 1º nível (SPEC-008 §5.5) — é o que faz arrastar um
+ * ramo para o outro lado da raiz trocar o lado de verdade, em vez de só mover
+ * o desenho. Recusa em qualquer nó que não seja filho direto da raiz.
+ */
+export function setNodeSide(doc: Y.Doc, id: string, side: NodeSide, origin?: unknown): boolean {
+  const nodes = readNodes(doc);
+  const node = nodes[id];
+  const root = findRoot(nodes);
+  if (!node || !root || node.parentId !== root.id) return false;
+  if (!(NODE_SIDES as readonly string[]).includes(side)) return false;
+  if (node.side === side) return false;
+  const siblings = (childrenIndex(nodes).get(root.id) ?? []).filter((s) => s.id !== id);
+  doc.transact(() => {
+    const map = nodesMap(doc);
+    freezeSides(map, siblings);
+    map.get(id)?.set('side', side);
   }, origin);
   return true;
 }
@@ -320,20 +379,33 @@ export function setNodeOffsets(
  * bloco. As guardas são as mesmas de `moveNode`: a raiz não se move, o alvo
  * precisa existir e não pode estar dentro do próprio ramo (ciclo).
  */
-export function reparentNode(doc: Y.Doc, id: string, newParentId: string, origin?: unknown): boolean {
+export function reparentNode(
+  doc: Y.Doc,
+  id: string,
+  newParentId: string,
+  origin?: unknown,
+  /** Lado, quando o novo pai é a raiz (SPEC-008 §2.3). */
+  side?: NodeSide,
+): boolean {
   const nodes = readNodes(doc);
   const node = nodes[id];
   if (!node || node.parentId === null || !nodes[newParentId]) return false;
   if (isInBranch(nodes, id, newParentId)) return false;
   const siblings = (childrenIndex(nodes).get(newParentId) ?? []).filter((s) => s.id !== id);
   const order = orderBetween(siblings[siblings.length - 1]?.order, undefined);
+  const toRoot = findRoot(nodes)?.id === newParentId;
+  const newSide = toRoot ? (side ?? sideForNewBranch(siblings)) : undefined;
   doc.transact(() => {
-    const y = nodesMap(doc).get(id);
+    const map = nodesMap(doc);
+    if (toRoot) freezeSides(map, siblings);
+    const y = map.get(id);
     if (!y) return;
     y.set('parentId', newParentId);
     y.set('order', order);
     y.delete('dx');
     y.delete('dy');
+    if (newSide) y.set('side', newSide);
+    else y.delete('side');
   }, origin);
   return true;
 }
@@ -422,7 +494,10 @@ export function moveSibling(doc: Y.Doc, id: string, direction: 'up' | 'down', or
   const nodes = readNodes(doc);
   const node = nodes[id];
   if (!node?.parentId) return false;
-  const siblings = childrenIndex(nodes).get(node.parentId) ?? [];
+  const all = childrenIndex(nodes).get(node.parentId) ?? [];
+  // Na raiz, "de cima" e "de baixo" só existem dentro do lado (SPEC-008 §2.3):
+  // o vizinho do outro lado está na outra metade do mapa.
+  const siblings = sameSideSiblings(nodes, node.parentId, id, all);
   const at = siblings.findIndex((s) => s.id === id);
   const step = direction === 'up' ? -1 : 1;
   const target = siblings[at + step];
@@ -433,6 +508,22 @@ export function moveSibling(doc: Y.Doc, id: string, direction: 'up' | 'down', or
     direction === 'up' ? orderBetween(beyond?.order, target.order) : orderBetween(target.order, beyond?.order);
   doc.transact(() => nodesMap(doc).get(id)?.set('order', order), origin);
   return true;
+}
+
+/**
+ * Irmãos que contam para "mover para cima/baixo": todos, exceto na raiz, onde
+ * só valem os do mesmo lado do nó (SPEC-008 §2.3).
+ */
+function sameSideSiblings(
+  nodes: NodeRecord,
+  parentId: string,
+  id: string,
+  siblings: MindMapNode[],
+): MindMapNode[] {
+  if (findRoot(nodes)?.id !== parentId) return siblings;
+  const sides = resolveSides(siblings);
+  const mine = sides.get(id);
+  return mine ? siblings.filter((s) => sides.get(s.id) === mine) : siblings;
 }
 
 /** Aplica o reparo de árvore, se necessário. Retorna quantos nós foram reanexados. */

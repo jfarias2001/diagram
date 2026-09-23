@@ -1,11 +1,22 @@
 import type { EdgeArrow, EdgeLine, FlowEdgeRecord, Shape } from '@diagram/shared';
 import { NodeToolbar, Position } from '@xyflow/react';
 import { type ReactNode, useState } from 'react';
+import { type ActionGroup, ActionMenu } from '../../components/ActionMenu';
 import { ColorPicker } from '../../components/ColorPicker';
-import { IconInk, IconTrash } from '../editor/icons';
+import {
+  IconBold,
+  IconGridMenu,
+  IconInk,
+  IconPaint,
+  IconShape,
+  IconSibling,
+  IconTrash,
+} from '../../components/icons';
 
 // Barra de estilo da seleção (SPEC-003 §5.2). Para formas, acompanha a seleção
 // no quadro; para um conector, fica no topo.
+// SPEC-008 §5.4: as ações que não são de uso constante saíram da fileira de
+// ícones e foram para o menu em grade, com nome e atalho à vista.
 
 export interface ShapeStyleActions {
   setFill: (color: string) => void;
@@ -13,7 +24,74 @@ export interface ShapeStyleActions {
   /** Cor do texto (SPEC-007 §5.6). */
   setInk: (color: string) => void;
   toggleBold: () => void;
+  /** Copia a seleção ao lado (SPEC-003 §5.4). */
+  duplicate: () => void;
   remove: () => void;
+}
+
+type ShapePopover = 'fill' | 'stroke' | 'ink' | 'menu' | null;
+
+/** Grupos do menu da forma. Função pura, testável sem DOM (SPEC-008 §7). */
+export function shapeMenuGroups({
+  allBold,
+  count,
+  actions,
+  openPopover,
+  close,
+}: {
+  allBold: boolean;
+  count: number;
+  actions: ShapeStyleActions;
+  openPopover: (p: Exclude<ShapePopover, null>) => void;
+  close: () => void;
+}): ActionGroup[] {
+  const run = (fn: () => void) => () => {
+    close();
+    fn();
+  };
+  return [
+    {
+      title: 'Aparência',
+      items: [
+        { id: 'fill', label: 'Preenchimento', icon: IconPaint, onSelect: () => openPopover('fill') },
+        { id: 'stroke', label: 'Borda', icon: IconShape, onSelect: () => openPopover('stroke') },
+        { id: 'ink', label: 'Cor do texto', icon: IconInk, onSelect: () => openPopover('ink') },
+        {
+          id: 'bold',
+          label: 'Negrito',
+          shortcut: 'Ctrl+B',
+          icon: IconBold,
+          pressed: allBold,
+          onSelect: run(actions.toggleBold),
+        },
+      ],
+    },
+    {
+      title: 'Organizar',
+      items: [
+        {
+          id: 'duplicate',
+          label: count > 1 ? 'Duplicar formas' : 'Duplicar',
+          shortcut: 'Ctrl+D',
+          icon: IconSibling,
+          onSelect: run(actions.duplicate),
+        },
+      ],
+    },
+    {
+      title: 'Perigo',
+      items: [
+        {
+          id: 'delete',
+          label: 'Apagar',
+          shortcut: 'Delete',
+          icon: IconTrash,
+          danger: true,
+          onSelect: run(actions.remove),
+        },
+      ],
+    },
+  ];
 }
 
 export function ShapeSelectionBar({
@@ -29,10 +107,11 @@ export function ShapeSelectionBar({
   defaults: { fill: string; stroke: string; ink: string };
   actions: ShapeStyleActions;
 }) {
-  const [popover, setPopover] = useState<'fill' | 'stroke' | 'ink' | null>(null);
+  const [popover, setPopover] = useState<ShapePopover>(null);
   const first = shapes[0];
   if (!first) return null;
   const allBold = shapes.every((s) => s.bold);
+  const close = () => setPopover(null);
 
   return (
     <NodeToolbar nodeId={shapes.map((s) => s.id)} isVisible position={Position.Top} offset={12}>
@@ -48,18 +127,25 @@ export function ShapeSelectionBar({
           <BarButton label="Cor da borda" pressed={popover === 'stroke'} onClick={() => setPopover((p) => (p === 'stroke' ? null : 'stroke'))}>
             <span className="h-4 w-4 rounded-full border-[3px]" style={{ borderColor: first.stroke ?? defaults.stroke }} />
           </BarButton>
-          <BarButton label="Cor do texto" pressed={popover === 'ink'} onClick={() => setPopover((p) => (p === 'ink' ? null : 'ink'))}>
-            <IconInk />
-          </BarButton>
-          <BarButton label="Negrito" shortcut="Ctrl+B" pressed={allBold} onClick={actions.toggleBold}>
-            <span className="w-4 text-sm font-bold">B</span>
-          </BarButton>
           <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />
-          <BarButton label="Apagar" shortcut="Delete" danger onClick={actions.remove}>
-            <IconTrash />
+          <BarButton label="Mais ações" pressed={popover === 'menu'} onClick={() => setPopover((p) => (p === 'menu' ? null : 'menu'))}>
+            <IconGridMenu />
           </BarButton>
         </div>
-        {popover && (
+        {popover === 'menu' && (
+          <ActionMenu
+            groups={shapeMenuGroups({
+              allBold,
+              count: shapes.length,
+              actions,
+              openPopover: setPopover,
+              close,
+            })}
+            label={shapes.length > 1 ? 'Ações das formas' : 'Ações da forma'}
+            onClose={close}
+          />
+        )}
+        {popover && popover !== 'menu' && (
           <div className="rounded-xl border border-line bg-surface p-2.5 shadow-lg">
             <ColorPicker
               key={popover}

@@ -54,7 +54,7 @@ test('MVP: acesso, mapa colaborativo e permissões', async ({ browser }) => {
   await login(ana, 'ana@gmail.com', tempPassword);
   await choosePassword(ana, tempPassword, 'senha da ana 2026');
   await shot(ana, '04-painel-vazio');
-  await ana.getByRole('button', { name: '+ Novo' }).click();
+  await ana.getByRole('button', { name: '+ Criar' }).click();
   await ana.getByRole('menuitem', { name: /Mapa mental/ }).click();
   await ana.getByLabel('Título').fill('Planejamento 2027');
   await ana.getByRole('button', { name: 'Criar mapa' }).click();
@@ -92,8 +92,8 @@ test('MVP: acesso, mapa colaborativo e permissões', async ({ browser }) => {
   await ana.getByRole('button', { name: 'Fechar' }).click();
 
   // 6) Admin abre pelo "Compartilhados comigo" e edita junto, em tempo real.
-  await admin.getByRole('link', { name: 'Documentos' }).click();
-  await admin.getByRole('tab', { name: 'Compartilhados comigo' }).click();
+  await admin.goto('/');
+  await admin.getByRole('button', { name: 'Compartilhados comigo' }).click();
   await admin.getByRole('link', { name: /Planejamento 2027/ }).click();
   await expect(admin.getByText('Marketing')).toBeVisible();
   await expect(ana.getByLabel(/Também no mapa: Admin Paglamp/)).toBeVisible();

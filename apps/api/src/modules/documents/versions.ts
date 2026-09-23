@@ -6,6 +6,7 @@ import {
   extractDocSearchText,
   idParamSchema,
   listVersionsQuerySchema,
+  readStyle,
   renameVersionBodySchema,
   type RestoreResult,
   type VersionList,
@@ -215,6 +216,8 @@ export const versionRoutes: FastifyPluginAsync = async (app) => {
         yState: Buffer.from(snapshot.state),
         sizeBytes: snapshot.sizeBytes,
         searchText: searchTextOf(snapshot.state),
+        // A cópia nasce com o tema daquela versão (SPEC-008 §2.4).
+        theme: themeOf(snapshot.state),
         lastEditedById: user.id,
         members: { create: { userId: user.id, role: 'OWNER' } },
       },
@@ -290,4 +293,9 @@ function formatMoment(at: Date): string {
 /** Texto da versão para a busca do painel, lido do próprio estado. */
 function searchTextOf(state: Uint8Array | Buffer): string {
   return extractDocSearchText(decodeDoc(new Uint8Array(state)));
+}
+
+/** Tema da versão, para a capa do cartão da cópia (SPEC-008 §2.4). */
+function themeOf(state: Uint8Array | Buffer): string | null {
+  return readStyle(decodeDoc(new Uint8Array(state))).theme ?? null;
 }

@@ -90,7 +90,7 @@ export function UsersPage() {
                       {!u.active ? (
                         <span className="text-muted">Desativado</span>
                       ) : u.mustChangePassword ? (
-                        <span className="text-filament-ink">Aguardando 1º acesso</span>
+                        <span className="text-brand-ink">Aguardando 1º acesso</span>
                       ) : (
                         <span className="text-ok">Ativo</span>
                       )}

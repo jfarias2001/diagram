@@ -25,10 +25,50 @@
 
 ## Estado atual (atualize a cada entrada)
 
-- **Fase:** SPEC-001 a 007 **todas implementadas e testadas** (329 testes + 9 E2E); ainda não publicadas na VPS.
+- **Fase:** SPEC-001 a 008 **todas implementadas e testadas** (415 testes + 14 E2E); ainda não publicadas na VPS.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
 - **Próximo passo:** primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+
+---
+
+## 2026-09-23 — Cara nova estilo MindMeister, menus em grade, lado do ramo e PDF (SPEC-008)
+**Tipo:** feature, fix
+**Refs:** PRD-008, SPEC-008, ADR-004
+
+**O que mudou**
+- **O bug do irmão, resolvido na raiz.** `layoutMindMap` redividia os ramos da raiz entre direita e esquerda **a cada desenho** (`splitAt = ceil(n/2)`): com um filho à direita, apertar `Enter` criava o irmão **à esquerda**, "atrás do pai", e os ramos antigos pulavam de lado sozinhos quando outro nascia. Agora o lado é **dado**: o nó ganhou o campo `side` (`left`/`right`), gravado quando o ramo nasce, e o layout **lê** em vez de recalcular. `resolveSides` (função pura, testada) decide o lado de quem não tem — e **enquanto nenhum ramo tiver lado, reproduz exatamente a regra antiga**, que é o que faz um documento criado antes desta entrega abrir idêntico. Quando o primeiro ramo novo nasce, o lado dos antigos é **congelado na mesma transação** (um `Ctrl+Z` desfaz tudo).
+- **De brinde, a pendência da SPEC-006 §10 fechou:** arrastar um ramo para o outro lado da raiz agora **troca o lado de verdade** (o ponto de soltura decide), em vez de só mover o desenho com as ligações saindo do lado errado. `Ctrl+↑`/`Ctrl+↓` na raiz passou a considerar só os irmãos **do mesmo lado** — o vizinho do outro lado está na outra metade do mapa.
+- **Paleta nova (estilo MindMeister).** O âmbar saiu da interface: agora é azul→violeta como cor de ação, fundo claro neutro e **lateral escura**. Um token novo, `--on-brand`, resolve o que o teste de contraste pegou: no modo escuro a cor de ação é clara, então o texto do botão principal tem de ser escuro. O **tema do documento não mudou** — as 8 paletas da SPEC-007 continuam iguais dentro do quadro, e por isso a barra do bloco segue combinando com o tema escolhido.
+- **Painel reestruturado:** lateral escura fixa com Meus documentos / Compartilhados / Lixeira e as árvores de pastas (as abas viraram itens da lateral), botão **"+ Criar"** em destaque, **cartões grandes** com capa colorida e alternância **cartões/lista** lembrada no `localStorage`. A capa vem do **tema do documento**, que agora o painel conhece: coluna `theme` (migration `add_document_theme`), **derivada no servidor** a partir do Y.Doc na mesma gravação que já extrai o texto da busca. Nenhuma rota aceita `theme` do cliente.
+- **A navegação da rota é injetada na lateral do shell** por um "encaixe" (contexto + portal): a página continua dona do estado das pastas, sem duplicar nada no `AppShell`.
+- **Menu em grade, com nome e atalho.** A fileira de 11 ícones sem rótulo virou uma barra enxuta (filho, irmão, cores) mais **"Mais ações"**, que abre um menu em grade agrupado — Criar, Aparência, Organizar, Conteúdo, Perigo — cada ação com ícone, nome e atalho, navegável por teclado (`↑↓←→`, `Home`/`End`, `Esc`). Vale no mapa e no fluxograma. Os grupos são montados por **função pura**, então o que cada papel enxerga tem teste sem DOM: **leitor só vê "Ver nota" e "Abrir link"**.
+- **Duas correções de posicionamento que o E2E pegou:** fora da raiz, a barra passou a sair pelo **lado de fora** do mapa (acima do bloco ela cobria o irmão de cima, que fica a 12 px) e com folga de 38 px, senão cobriria o "+" do bloco; e o que abre (menu ou seletor de cor) desce a partir da barra, ancorado **para fora**, então não cobre nem o bloco nem a própria barra.
+- **Ícones unificados:** `features/editor/icons.tsx` virou `components/icons.tsx` — uma base só (grade de 24, traço 1,75, 18 px, `currentColor`) com 25 ícones novos para painel, menu e exportação.
+- **Exportar em PDF.** Botão único "Exportar" abre um diálogo com formato (PNG/PDF), tamanho (**Ajustado ao mapa**, A4, A3), orientação e fundo; o padrão é PDF ajustado em paisagem. O PDF é gerado **no navegador** (ADR-004): `jspdf` carregado por `import()` — o build confirma que ele fica num pedaço próprio (129 kB gzip) **fora do carregamento inicial** — embutindo um raster mirando **200 dpi** na área impressa. As contas (`pageSizeFor`, `fitScale`, `rasterScale`) são funções puras com teste. Vale para mapa, fluxograma e **modo versão**, e o leitor exporta o que enxerga.
+- **`exportPng.ts` foi apagado**: PNG e PDF compartilham o mesmo caminho em `features/export/`.
+- **Testes:** 415 de unidade e integração (mais 86) e **14 E2E** (mais 5). Entre os novos: `resolveSides` nos seis casos (inclusive lado forjado e a regra antiga em 1…8 ramos), `addNode` congelando os lados em **uma** transação, `setNodeSide` recusando quem não é filho da raiz, leitor forjando `side` pelo WebSocket **descartado no servidor**, tema derivado chegando à coluna e ao painel (e tema estranho virando `null`), contraste AA de **todos** os tokens nos dois modos, grupos do menu por papel, as contas da página/raster, e os E2E que provam o irmão nascendo do mesmo lado e abaixo, o menu sem cobrir o bloco, a escolha cartões/lista sobrevivendo ao recarregar e um **PDF de verdade baixado** (confere `%PDF` nos primeiros bytes).
+
+**Revisão de segurança**
+- Checklist CLAUDE.md §9 revisada no que mudou:
+  - **Autorização:** nenhuma rota nova, nenhum papel novo, nenhuma consulta de documento nova — `assertDocumentAccess` continua sendo o ponto único. `side` é conteúdo do Y.Doc, então vale a marca `readOnly` do `onConnect`: teste novo com o leitor escrevendo cru no `Y.Map` e tendo a escrita descartada **no servidor**.
+  - **IDOR / vazamento:** `Document.theme` viaja dentro do `DocumentSummary`, que já é filtrado por acesso; quem não enxerga o documento não recebe nada dele.
+  - **Confiança no banco:** a coluna `theme` é derivada pelo servidor, mas quem lê **não confia nela** — valor fora de `THEME_IDS` vira `null` (teste com `<script>` gravado direto na coluna).
+  - **Injeção de CSS:** a capa do cartão e as cores da interface saem de **constantes do código** (`DOC_THEMES`, tokens). `side` é lista fechada validada **na leitura** do Y.Doc, como `shape` e `fill` (SPEC-006 §6).
+  - **XSS:** nenhum `dangerouslySetInnerHTML` novo (o projeto continua sem nenhum fora do DOMPurify já existente); os ícones são SVG escrito por nós. O "Abrir link" do menu do leitor usa o `link` já validado por `isSafeLink` (só `http`, `https`, `mailto`) e abre com `noopener,noreferrer`.
+  - **Exportação:** acontece 100% no navegador — não existe rota de exportação, então não há superfície nova. Nos metadados do PDF vai **só o título**, nunca autor ou e-mail. O nome do arquivo passa pelo `safeFileName` (teste com `../../etc/passwd`).
+  - **CSP:** o pedaço do `jspdf` é servido do próprio domínio (`script-src 'self'`) e **não usa `eval` nem `new Function`** (conferido no arquivo gerado), então a CSP da VPS continua intacta; `img-src 'self' data: blob:` já cobria o caminho do raster.
+  - **DoS:** teto de 40 MP e 12.000 px por lado no raster e de 14.400 pt na página — mapa gigante **reduz a resolução** e avisa, em vez de travar a aba.
+  - **Preferência local:** o `localStorage` guarda só `grid`/`list`, com validação na leitura e `try/catch`.
+  - **Segredos:** nada de `.env`, dump ou chave no commit (`git status` conferido).
+- `pnpm audit --prod`: **sem vulnerabilidades**. Dependência nova: `jspdf` 4.2.1 (MIT), só no cliente e só por `import()` (ADR-004).
+
+**Pendências / próximos passos**
+- [ ] O texto do PDF **não é selecionável** (é imagem em 200 dpi) — decisão do ADR-004; se a empresa pedir texto selecionável, vira outra entrega com `pdf-lib`.
+- [ ] O menu da forma no fluxograma ficou com *Duplicar* no grupo "Organizar": **alinhar e distribuir**, citados na SPEC-008 §5.4, não existem como comandos hoje (o alinhamento é encaixe durante o arrasto) e criá-los seria feature fora do PRD-008.
+- [ ] **Favoritos** (estrela) continua fora do escopo (PRD-008 §8); a lateral já tem lugar para ele.
+- [ ] A capa do cartão é cor do tema, **não miniatura do conteúdo** (PRD-008 §8): documento nunca aberto depois desta entrega fica com a capa padrão até a primeira gravação.
+- [ ] Primeiro deploy na VPS e PRD de backup do banco (pendência que vem desde a SPEC-004).
 
 ---
 

@@ -46,8 +46,8 @@ test('histórico: salvar versão com nome, visualizar e restaurar um ramo apagad
   const admin = await newPage(browser);
   await loginAdmin(admin);
 
-  await admin.getByRole('link', { name: 'Documentos' }).click();
-  await admin.getByRole('button', { name: '+ Novo' }).click();
+  await admin.goto('/');
+  await admin.getByRole('button', { name: '+ Criar' }).click();
   await admin.getByRole('menuitem', { name: /Mapa mental/ }).click();
   await admin.getByLabel('Título').fill('Plano com histórico');
   await admin.getByRole('button', { name: 'Criar mapa' }).click();

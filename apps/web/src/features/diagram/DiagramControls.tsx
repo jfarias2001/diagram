@@ -2,7 +2,7 @@ import { Panel, useReactFlow } from '@xyflow/react';
 import { type ReactNode, useEffect, useState } from 'react';
 import type * as Y from 'yjs';
 import { FIT_VIEW_OPTIONS } from '../editor/CanvasControls';
-import { IconFit, IconRedo, IconUndo, IconZoomIn, IconZoomOut } from '../editor/icons';
+import { IconFit, IconRedo, IconUndo, IconZoomIn, IconZoomOut } from '../../components/icons';
 import { Spinner } from '../../components/ui';
 
 // Controles do fluxograma (SPEC-003 §5.2): desfazer, zoom, grade e Organizar.

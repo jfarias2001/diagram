@@ -45,8 +45,8 @@ function ShapeNodeComponent({ id, data, selected }: NodeProps<ShapeFlowNode>) {
           isVisible={!!selected}
           minWidth={24}
           minHeight={24}
-          lineClassName="export-hidden !border-filament"
-          handleClassName="export-hidden !h-2.5 !w-2.5 !rounded-sm !border-filament !bg-surface"
+          lineClassName="export-hidden !border-brand"
+          handleClassName="export-hidden !h-2.5 !w-2.5 !rounded-sm !border-brand !bg-surface"
         />
       )}
 
@@ -83,7 +83,7 @@ function ShapeNodeComponent({ id, data, selected }: NodeProps<ShapeFlowNode>) {
       </div>
 
       {selected && (
-        <div className="pointer-events-none absolute -inset-1 rounded-md ring-2 ring-filament" aria-hidden />
+        <div className="pointer-events-none absolute -inset-1 rounded-md ring-2 ring-brand" aria-hidden />
       )}
       {peer && !selected && (
         <>
@@ -105,7 +105,7 @@ function ShapeNodeComponent({ id, data, selected }: NodeProps<ShapeFlowNode>) {
           type="source"
           position={h.position}
           isConnectable={data.canEdit}
-          className={`export-hidden !h-2.5 !w-2.5 !border-2 !border-filament !bg-surface !opacity-0 transition-opacity group-hover:!opacity-100 ${
+          className={`export-hidden !h-2.5 !w-2.5 !border-2 !border-brand !bg-surface !opacity-0 transition-opacity group-hover:!opacity-100 ${
             selected ? '!opacity-100' : ''
           }`}
         />

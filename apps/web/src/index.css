@@ -4,43 +4,58 @@
 @import '@fontsource-variable/instrument-sans';
 
 /*
- * Tokens (SPEC-001 §5). Base grafite e sóbria; o único acento é o âmbar de
- * filamento — usado para foco e para o nó selecionado "aceso".
+ * Tokens da interface (SPEC-008 §5.1). Base clara e neutra com azul→violeta
+ * como cor de ação, e uma lateral quase preta — a mesma família do MindMeister,
+ * que é a referência de quem usa isto. O âmbar da SPEC-001 saiu da interface;
+ * ele continua vivo como tema de DOCUMENTO (SPEC-007), dentro do quadro.
  *
- * SPEC-007 §5.4: o modo claro deixou de ser branco puro. O fundo é um cinza
- * levemente quente e as superfícies ficam um tom acima — passar horas olhando
- * um quadro branco de verdade cansa a vista.
+ * Todo par usado em texto passa por teste de contraste (tokens.test.ts).
  */
 :root {
-  --canvas: #f2f1ed;
-  --surface: #fbfaf8;
-  --surface-2: #ecebe5;
-  --ink: #1b2230;
-  --muted: #676d78;
-  --line: #e1dfd8;
-  --grid: #d3d0c8;
-  --filament: #f2b705;
-  --filament-soft: rgb(242 183 5 / 0.28);
-  --filament-ink: #7a5800;
-  --danger: #c2372b;
-  --ok: #2f8a4c;
+  --canvas: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #eef0f4;
+  --ink: #14161c;
+  --muted: #5c6472;
+  --line: #e2e5eb;
+  --grid: #d7dbe3;
+  --brand: #3b5bfd;
+  --brand-2: #6d3df0;
+  --brand-ink: #2b45d6;
+  --brand-soft: rgb(59 91 253 / 0.14);
+  /* Texto por cima da cor de ação: no claro a marca é escura, no escuro é clara. */
+  --on-brand: #ffffff;
+  --nav: #0e1016;
+  --nav-2: #171a23;
+  --nav-ink: #e8eaf0;
+  --nav-muted: #9aa3b2;
+  --danger: #c8322a;
+  --ok: #17754a;
+  --warn: #9a5b06;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --canvas: #12151b;
-    --surface: #1c212a;
-    --surface-2: #262c38;
-    --ink: #e8ebf0;
-    --muted: #97a0af;
-    --line: #2c3340;
-    --grid: #262c37;
-    --filament: #ffc82e;
-    --filament-soft: rgb(255 200 46 / 0.22);
-    --filament-ink: #ffd766;
-    --danger: #ff6b5e;
-    --ok: #5ccf83;
+    --canvas: #0f1116;
+    --surface: #171a21;
+    --surface-2: #1f232c;
+    --ink: #e9ebf1;
+    --muted: #99a1b0;
+    --line: #262b35;
+    --grid: #232833;
+    --brand: #6c8bff;
+    --brand-2: #9b7bff;
+    --brand-ink: #a9bcff;
+    --brand-soft: rgb(108 139 255 / 0.18);
+    --on-brand: #0f1116;
+    --nav: #0b0d12;
+    --nav-2: #141822;
+    --nav-ink: #e8eaf0;
+    --nav-muted: #99a1b0;
+    --danger: #ff7a6e;
+    --ok: #4ec98a;
+    --warn: #f5b74f;
     color-scheme: dark;
   }
 }
@@ -82,8 +97,15 @@
   --color-ink: var(--ink);
   --color-muted: var(--muted);
   --color-line: var(--line);
-  --color-filament: var(--filament);
-  --color-filament-ink: var(--filament-ink);
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-ink: var(--brand-ink);
+  --color-on-brand: var(--on-brand);
+  --color-nav: var(--nav);
+  --color-nav-2: var(--nav-2);
+  --color-nav-ink: var(--nav-ink);
+  --color-nav-muted: var(--nav-muted);
+  --color-warn: var(--warn);
   --color-danger: var(--danger);
   --color-ok: var(--ok);
 }
@@ -103,15 +125,15 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--filament);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
-/* O nó selecionado "acende": halo de filamento. */
+/* O nó selecionado ganha um anel na cor de ação. */
 .node-lit {
   box-shadow:
-    0 0 0 2px var(--filament),
-    0 0 18px 4px var(--filament-soft);
+    0 0 0 2px var(--brand),
+    0 0 0 6px var(--brand-soft);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -122,7 +144,7 @@ body {
 
 /* Bloco sob o ponteiro durante um arrasto: soltar aqui troca o pai (SPEC-006 §5.1). */
 .drop-target {
-  outline: 3px dashed var(--filament);
+  outline: 3px dashed var(--brand);
   outline-offset: 4px;
 }
 
@@ -137,7 +159,7 @@ body {
 }
 
 .rewire-target:hover {
-  outline: 2px solid var(--filament);
+  outline: 2px solid var(--brand);
   outline-offset: 4px;
 }
 

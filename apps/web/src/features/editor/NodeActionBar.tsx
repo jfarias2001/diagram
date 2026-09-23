@@ -1,24 +1,28 @@
 import { type MindMapNode, NODE_SHAPES, type NodeShape, normalizeLink, readableInk } from '@diagram/shared';
 import { NodeToolbar, Position, useStore } from '@xyflow/react';
 import { type ReactNode, useState } from 'react';
+import { type ActionGroup, ActionMenu } from '../../components/ActionMenu';
 import { ColorPicker } from '../../components/ColorPicker';
 import {
   IconArrowDown,
   IconArrowUp,
+  IconBold,
   IconBranch,
   IconChild,
   IconCollapse,
   IconExpand,
   IconExternal,
+  IconGridMenu,
   IconInk,
   IconLink,
   IconNote,
+  IconPaint,
   IconScissors,
   IconShape,
   IconSibling,
   IconTidy,
   IconTrash,
-} from './icons';
+} from '../../components/icons';
 
 // Barra flutuante do nó selecionado (SPEC-002 §5.1). Uma só para o mapa inteiro.
 
@@ -71,10 +75,191 @@ interface Props {
   siblingCount: number;
   /** Algum bloco do ramo foi movido à mão — só então "Organizar este ramo" faz algo. */
   branchMoved: boolean;
+  /** Lado do bloco no mapa: a barra abre para fora, longe dos irmãos (SPEC-008 §5.4). */
+  side: 'left' | 'right' | 'root';
   actions: NodeActions;
 }
 
-type Popover = 'color' | 'link' | 'shape' | null;
+type Popover = 'color' | 'link' | 'shape' | 'menu' | null;
+
+/** O que cada ação do menu em grade precisa saber (SPEC-008 §5.4). */
+export interface MenuContext {
+  node: MindMapNode;
+  canEdit: boolean;
+  isRoot: boolean;
+  hasChildren: boolean;
+  siblingCount: number;
+  branchMoved: boolean;
+  actions: NodeActions;
+  /** Troca o conteúdo do popover (cores, formato, link) sem fechar tudo. */
+  openPopover: (p: 'color' | 'link' | 'shape' | 'menu') => void;
+  /** Fecha o menu e devolve o foco ao quadro. */
+  close: () => void;
+}
+
+/**
+ * Grupos do menu do bloco. Função pura: dá para testar o que cada papel vê sem
+ * montar DOM nenhum (SPEC-008 §7).
+ */
+export function mindMenuGroups(ctx: MenuContext): ActionGroup[] {
+  const { node, canEdit, isRoot, hasChildren, siblingCount, branchMoved, actions } = ctx;
+  const run = (fn: (id: string) => void) => () => {
+    ctx.close();
+    fn(node.id);
+  };
+
+  // Leitor e comentador só enxergam o que é leitura (PRD-008 §7).
+  if (!canEdit) {
+    const items: ActionGroup['items'] = [];
+    if (node.note) {
+      items.push({ id: 'note', label: 'Ver nota', icon: IconNote, onSelect: run(actions.openNote) });
+    }
+    if (node.link) {
+      const link = node.link;
+      items.push({
+        id: 'link',
+        label: 'Abrir link',
+        icon: IconExternal,
+        onSelect: () => {
+          ctx.close();
+          window.open(link, '_blank', 'noopener,noreferrer');
+        },
+      });
+    }
+    return items.length > 0 ? [{ title: 'Conteúdo', items }] : [];
+  }
+
+  return [
+    {
+      title: 'Criar',
+      items: [
+        { id: 'child', label: 'Novo filho', shortcut: 'Tab', icon: IconChild, onSelect: run(actions.createChild) },
+        ...(isRoot
+          ? []
+          : [
+              {
+                id: 'sibling',
+                label: 'Novo irmão',
+                shortcut: 'Enter',
+                icon: IconSibling,
+                onSelect: run(actions.createSibling),
+              },
+              {
+                id: 'cut',
+                label: 'Religar',
+                shortcut: 'Ctrl+X',
+                icon: IconScissors,
+                onSelect: run(actions.cutEdge),
+              },
+            ]),
+      ],
+    },
+    {
+      title: 'Aparência',
+      items: [
+        { id: 'colors', label: 'Cores', icon: IconPaint, onSelect: () => ctx.openPopover('color') },
+        { id: 'shape', label: 'Formato', icon: IconShape, onSelect: () => ctx.openPopover('shape') },
+        {
+          id: 'bold',
+          label: 'Negrito',
+          shortcut: 'Ctrl+B',
+          icon: IconBold,
+          pressed: !!node.bold,
+          onSelect: run(actions.toggleBold),
+        },
+      ],
+    },
+    {
+      title: 'Organizar',
+      items: [
+        ...(isRoot || siblingCount <= 1
+          ? []
+          : [
+              {
+                id: 'up',
+                label: 'Subir',
+                shortcut: 'Ctrl+↑',
+                icon: IconArrowUp,
+                onSelect: () => {
+                  ctx.close();
+                  actions.reorder(node.id, 'up');
+                },
+              },
+              {
+                id: 'down',
+                label: 'Descer',
+                shortcut: 'Ctrl+↓',
+                icon: IconArrowDown,
+                onSelect: () => {
+                  ctx.close();
+                  actions.reorder(node.id, 'down');
+                },
+              },
+            ]),
+        ...(branchMoved
+          ? [{ id: 'tidy', label: 'Organizar ramo', icon: IconTidy, onSelect: run(actions.tidy) }]
+          : []),
+        ...(hasChildren
+          ? [
+              {
+                id: 'collapse',
+                label: node.collapsed ? 'Expandir' : 'Recolher',
+                shortcut: 'Espaço',
+                icon: node.collapsed ? IconExpand : IconCollapse,
+                onSelect: run(actions.toggleCollapse),
+              },
+              {
+                id: 'branch-drag',
+                label: 'Levar o ramo',
+                icon: IconBranch,
+                pressed: actions.branchDrag,
+                onSelect: () => {
+                  ctx.close();
+                  actions.toggleBranchDrag();
+                },
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      title: 'Conteúdo',
+      items: [
+        {
+          id: 'note',
+          label: node.note ? 'Ver nota' : 'Nota',
+          icon: IconNote,
+          pressed: !!node.note,
+          onSelect: run(actions.openNote),
+        },
+        {
+          id: 'link',
+          label: node.link ? 'Editar link' : 'Link',
+          icon: IconLink,
+          pressed: !!node.link,
+          onSelect: () => ctx.openPopover('link'),
+        },
+      ],
+    },
+    ...(isRoot
+      ? []
+      : [
+          {
+            title: 'Perigo',
+            items: [
+              {
+                id: 'delete',
+                label: 'Apagar',
+                shortcut: 'Delete',
+                icon: IconTrash,
+                danger: true,
+                onSelect: run(actions.removeNode),
+              },
+            ],
+          },
+        ]),
+  ];
+}
 
 export function NodeActionBar({
   node,
@@ -84,43 +269,74 @@ export function NodeActionBar({
   hasChildren,
   siblingCount,
   branchMoved,
+  side,
   actions,
 }: Props) {
   const [popover, setPopover] = useState<Popover>(null);
   const isRoot = node.parentId === null;
-  // Sem espaço acima do bloco, a barra desce: senão ela (e o seletor aberto)
-  // ficariam escondidos atrás do cabeçalho do editor.
-  const needed = popover ? 340 : 110;
-  const place = useStore((state) => {
+  // Altura do que está aberto: o menu em grade é bem mais alto que um seletor.
+  const panelHeight = popover === 'menu' ? 420 : popover ? 330 : 0;
+  // Posição do bloco na tela, para o que abrir nunca ficar atrás do cabeçalho
+  // nem sair pela borda de baixo (SPEC-007 §5.7, SPEC-008 §5.4).
+  const top = useStore((state) => {
     const item = state.nodeLookup.get(node.id);
-    if (!item) return Position.Top;
-    const top = item.internals.positionAbsolute.y * state.transform[2] + state.transform[1];
-    return top < needed ? Position.Bottom : Position.Top;
+    if (!item) return 0;
+    return item.internals.positionAbsolute.y * state.transform[2] + state.transform[1];
   });
-  // O seletor abre sempre do lado oposto ao bloco, para não cobrir o que se pinta.
-  const popoverSide = place === Position.Bottom ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]';
+  const viewHeight = useStore((state) => state.height);
+  // Fora da raiz, a barra sai pelo lado de FORA do mapa: acima do bloco ela
+  // cobriria o irmão de cima, que fica a poucos pixels (PRD-008 §1).
+  const sideways = !isRoot && side !== 'root';
+  const low = top < panelHeight + 110;
+  const place = sideways
+    ? side === 'left'
+      ? Position.Left
+      : Position.Right
+    : low
+      ? Position.Bottom
+      : Position.Top;
+  // De lado, o painel desce a partir da barra (ou sobe, se estiver no rodapé) e
+  // cresce para FORA, nunca por cima do bloco; acima/abaixo do bloco, ele abre
+  // sempre para o lado oposto ao bloco.
+  const vertical = low ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]';
+  const popoverSide = sideways
+    ? `${top + panelHeight < viewHeight ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]'} ${
+        side === 'left' ? 'right-0' : 'left-0'
+      }`
+    : `left-1/2 -translate-x-1/2 ${vertical}`;
   const toggle = (p: Exclude<Popover, null>) => setPopover((cur) => (cur === p ? null : p));
-  const run = (fn: (id: string) => void) => () => {
-    fn(node.id);
+  const close = () => {
+    setPopover(null);
     actions.focusCanvas();
   };
 
+  const groups = mindMenuGroups({
+    node,
+    canEdit,
+    isRoot,
+    hasChildren,
+    siblingCount,
+    branchMoved,
+    actions,
+    openPopover: setPopover,
+    close,
+  });
+
   // Leitor sem nota e sem link: nada a mostrar.
-  if (!canEdit && !node.note && !node.link) return null;
+  if (!canEdit && groups.length === 0) return null;
 
   return (
-    <NodeToolbar nodeId={node.id} isVisible position={place} offset={12}>
+    // De lado, a barra começa depois do "+" do bloco (que fica a 26 px da
+    // borda): senão ela cobriria o botão de criar filho.
+    <NodeToolbar nodeId={node.id} isVisible position={place} offset={sideways ? 38 : 12}>
       {/* O popover sai do fluxo: a barra fica sempre à mesma distância do bloco,
-          por mais alto que o seletor de cor seja (senão ela some atrás do cabeçalho). */}
+          por mais alto que o menu ou o seletor de cor seja. */}
       <div
         className="export-hidden relative flex flex-col items-center"
         onKeyDown={(e) => {
           // Atalhos do mapa não disparam de dentro da barra (CLAUDE.md §7).
           e.stopPropagation();
-          if (e.key === 'Escape') {
-            setPopover(null);
-            actions.focusCanvas();
-          }
+          if (e.key === 'Escape') close();
         }}
       >
         <div
@@ -138,101 +354,28 @@ export function NodeActionBar({
                   <IconSibling />
                 </BarButton>
               )}
-              <Divider />
               <BarButton label="Cores" pressed={popover === 'color'} onClick={() => toggle('color')}>
                 <span
                   className="h-4 w-4 rounded-full border border-line"
                   style={{
-                    background: node.fill ?? node.color ?? `conic-gradient(${palette.slice(0, 4).join(',')},${palette[0]})`,
+                    background:
+                      node.fill ?? node.color ?? `conic-gradient(${palette.slice(0, 4).join(',')},${palette[0]})`,
                     borderColor: node.color,
                   }}
                 />
               </BarButton>
-              <BarButton label="Formato do bloco" pressed={popover === 'shape'} onClick={() => toggle('shape')}>
-                <IconShape />
-              </BarButton>
-              <BarButton label="Negrito" shortcut="Ctrl+B" pressed={!!node.bold} onClick={run(actions.toggleBold)}>
-                <span className="w-4 text-sm font-bold">B</span>
-              </BarButton>
-            </>
-          )}
-          {canEdit && !isRoot && (
-            <BarButton label="Cortar e religar em outro tópico-pai" shortcut="Ctrl+X" onClick={run(actions.cutEdge)}>
-              <IconScissors />
-            </BarButton>
-          )}
-          {canEdit && hasChildren && (
-            <BarButton
-              label={actions.branchDrag ? 'Arrastar move só este bloco' : 'Arrastar leva o ramo junto (ou segure Shift)'}
-              pressed={actions.branchDrag}
-              onClick={() => {
-                actions.toggleBranchDrag();
-                actions.focusCanvas();
-              }}
-            >
-              <IconBranch />
-            </BarButton>
-          )}
-          {canEdit && !isRoot && siblingCount > 1 && (
-            <>
-              <BarButton label="Mover para cima" shortcut="Ctrl+↑" onClick={() => actions.reorder(node.id, 'up')}>
-                <IconArrowUp />
-              </BarButton>
-              <BarButton label="Mover para baixo" shortcut="Ctrl+↓" onClick={() => actions.reorder(node.id, 'down')}>
-                <IconArrowDown />
-              </BarButton>
-            </>
-          )}
-          {canEdit && branchMoved && (
-            <BarButton label="Organizar este ramo" onClick={run(actions.tidy)}>
-              <IconTidy />
-            </BarButton>
-          )}
-          {(canEdit || node.note) && (
-            <BarButton label={node.note ? 'Ver nota' : 'Adicionar nota'} pressed={false} onClick={() => actions.openNote(node.id)}>
-              <IconNote />
-            </BarButton>
-          )}
-          {canEdit ? (
-            <BarButton label={node.link ? 'Editar link' : 'Adicionar link'} pressed={popover === 'link'} onClick={() => toggle('link')}>
-              <IconLink />
-            </BarButton>
-          ) : (
-            node.link && (
-              <a
-                href={node.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={node.link}
-                aria-label={`Abrir link: ${node.link}`}
-                className="flex h-8 items-center justify-center rounded-lg px-2 text-muted hover:bg-surface-2 hover:text-ink"
-              >
-                <IconExternal />
-              </a>
-            )
-          )}
-          {canEdit && hasChildren && (
-            <BarButton
-              label={node.collapsed ? 'Expandir ramo' : 'Recolher ramo'}
-              shortcut="Espaço"
-              onClick={run(actions.toggleCollapse)}
-            >
-              {node.collapsed ? <IconExpand /> : <IconCollapse />}
-            </BarButton>
-          )}
-          {canEdit && !isRoot && (
-            <>
               <Divider />
-              <BarButton label="Apagar tópico e seus filhos" shortcut="Delete" danger onClick={() => actions.removeNode(node.id)}>
-                <IconTrash />
-              </BarButton>
             </>
           )}
+          <BarButton label="Mais ações" pressed={popover === 'menu'} onClick={() => toggle('menu')}>
+            <IconGridMenu />
+          </BarButton>
         </div>
 
-        {popover && canEdit && (
-          <div className={`absolute left-1/2 z-10 -translate-x-1/2 ${popoverSide}`}>
-            {popover === 'color' && (
+        {popover && (
+          <div className={`absolute z-10 ${popoverSide}`}>
+            {popover === 'menu' && <ActionMenu groups={groups} label="Ações do tópico" onClose={close} />}
+            {popover === 'color' && canEdit && (
               <NodeColors
                 node={node}
                 palette={palette}
@@ -243,25 +386,21 @@ export function NodeActionBar({
                 }}
               />
             )}
-            {popover === 'shape' && (
+            {popover === 'shape' && canEdit && (
               <ShapePicker
                 current={node.shape ?? defaultShape}
                 onPick={(shape) => {
                   actions.setShape(node.id, shape);
-                  setPopover(null);
-                  actions.focusCanvas();
+                  close();
                 }}
               />
             )}
-            {popover === 'link' && (
+            {popover === 'link' && canEdit && (
               <LinkEditor
                 key={node.id}
                 current={node.link ?? ''}
                 onSave={(link) => actions.setLink(node.id, link)}
-                onClose={() => {
-                  setPopover(null);
-                  actions.focusCanvas();
-                }}
+                onClose={close}
               />
             )}
           </div>
@@ -448,7 +587,7 @@ function LinkEditor({
           setError(null);
         }}
         aria-invalid={!!error}
-        className="nodrag h-9 rounded-lg border border-line bg-surface px-2.5 text-sm text-ink placeholder:text-muted focus:border-filament focus:outline-none"
+        className="nodrag h-9 rounded-lg border border-line bg-surface px-2.5 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none"
       />
       {error && (
         <p role="alert" className="text-xs text-danger">

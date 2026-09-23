@@ -91,6 +91,9 @@ model Document {
   yState         Bytes?
   /// Texto dos nós (até 10k chars), para busca.
   searchText     String           @default("")
+  /// Id do tema do documento (SPEC-007), copiado do Y.Doc a cada gravação.
+  /// Só serve para o painel pintar a capa do cartão — nulo = tema padrão (SPEC-008 §2.4).
+  theme          String?          @db.VarChar(32)
   sizeBytes      Int              @default(0)
   trashedAt      DateTime?
   lastEditedById String?
