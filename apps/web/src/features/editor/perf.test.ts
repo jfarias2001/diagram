@@ -123,3 +123,39 @@ describe('desempenho do tema e do arrasto solo (SPEC-007)', () => {
     expect(runs[Math.floor(runs.length / 2)]!).toBeLessThan(50);
   });
 });
+
+// SPEC-009 §7: planejar a animação não pode pesar no orçamento do frame.
+describe('desempenho da animação de layout', () => {
+  it('planTransition com 1.000 nós e 300 mudando: mediana < 4 ms', async () => {
+    const { planTransition, lerpPoint } = await import('./motion/planTransition');
+    const shown = new Map<string, { x: number; y: number }>();
+    const next = new Map<string, { x: number; y: number }>();
+    for (let i = 0; i < 1000; i++) {
+      shown.set(`n${i}`, { x: i, y: i });
+      next.set(`n${i}`, { x: i, y: i + (i < 300 ? 40 : 0) });
+    }
+    const parentOf = (id: string) => (id === 'n0' ? null : 'n0');
+    planTransition({ shown, next, parentOf }); // aquecimento
+    const runs: number[] = [];
+    for (let r = 0; r < 15; r++) {
+      const start = performance.now();
+      const plan = planTransition({ shown, next, parentOf });
+      runs.push(performance.now() - start);
+      expect(plan.tracks.size).toBe(300);
+    }
+    runs.sort((a, b) => a - b);
+    expect(runs[Math.floor(runs.length / 2)]!).toBeLessThan(4);
+
+    // Um frame: interpolar os 300 e reaproveitar os outros 700.
+    const frameRuns: number[] = [];
+    const nodes = [...next].map(([id, position]) => ({ id, position }));
+    for (let r = 0; r < 15; r++) {
+      const start = performance.now();
+      const out = nodes.map((n) => (n.position.y !== shown.get(n.id)!.y ? { ...n, position: lerpPoint(shown.get(n.id)!, n.position, 0.5) } : n));
+      frameRuns.push(performance.now() - start);
+      expect(out).toHaveLength(1000);
+    }
+    frameRuns.sort((a, b) => a - b);
+    expect(frameRuns[Math.floor(frameRuns.length / 2)]!).toBeLessThan(2);
+  });
+});

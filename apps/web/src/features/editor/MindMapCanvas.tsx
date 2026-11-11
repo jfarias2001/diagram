@@ -23,7 +23,6 @@ import {
   type Node,
   type NodeChange,
   Panel,
-  ReactFlow,
   useReactFlow,
 } from '@xyflow/react';
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -37,6 +36,8 @@ import { type NodeActions, NodeActionBar } from './NodeActionBar';
 import { stableData } from './stableData';
 import { edgeWidthForDepth } from './taper';
 import { useRenderAll } from '../export/renderAll';
+import { useReducedMotion } from '../../lib/motion';
+import { AnimatedReactFlow } from './motion/AnimatedFlow';
 import { PresenceContext, usePresenceStore } from './presence';
 import { LOCAL_ORIGIN } from './useMindMap';
 
@@ -94,6 +95,7 @@ export function MindMapCanvas({
   // Seleções dos colegas por bloco, fora do memo do mapa (SPEC-009 §5.7).
   const presence = usePresenceStore(provider);
   const renderAll = useRenderAll();
+  const reducedMotion = useReducedMotion();
 
   // Seleção publicada para os colegas.
   useEffect(() => {
@@ -599,7 +601,12 @@ export function MindMapCanvas({
       aria-label="Mapa mental. Use as setas para navegar."
     >
       <PresenceContext.Provider value={presence}>
-      <ReactFlow
+      <AnimatedReactFlow
+        // O mapa flui (SPEC-009 §5.6): blocos deslizam até o lugar novo. Nada
+        // anima durante o arrasto, no modo versão ou com "reduzir movimento".
+        animate={!drag && !!provider && !reducedMotion}
+        hierarchy
+        onAnimatingChange={(on) => wrapperRef.current?.setAttribute('data-animating', String(on))}
         nodes={flow.flowNodes}
         edges={flow.flowEdges}
         nodeTypes={nodeTypes}
@@ -703,7 +710,7 @@ export function MindMapCanvas({
             actions={actions}
           />
         )}
-      </ReactFlow>
+      </AnimatedReactFlow>
       </PresenceContext.Provider>
     </div>
   );
