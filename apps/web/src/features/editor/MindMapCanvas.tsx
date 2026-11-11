@@ -36,7 +36,8 @@ import { type NodeActions, NodeActionBar } from './NodeActionBar';
 import { stableData } from './stableData';
 import { edgeWidthForDepth } from './taper';
 import { useRenderAll } from '../export/renderAll';
-import { useReducedMotion } from '../../lib/motion';
+import { DUR, motionMs, useReducedMotion } from '../../lib/motion';
+import { panToReveal } from './motion/camera';
 import { AnimatedReactFlow } from './motion/AnimatedFlow';
 import { PresenceContext, usePresenceStore } from './presence';
 import { LOCAL_ORIGIN } from './useMindMap';
@@ -91,7 +92,10 @@ export function MindMapCanvas({
     pendingRef.current = '';
     return text;
   }, []);
-  const { getIntersectingNodes } = useReactFlow();
+  const { getIntersectingNodes, getViewport, setViewport } = useReactFlow();
+  // A câmera acompanha a seleção que mudou por CRIAÇÃO ou SETAS — não por
+  // clique: quem clicou já está vendo o bloco (SPEC-009 §5.6.3).
+  const followRef = useRef(false);
   // Seleções dos colegas por bloco, fora do memo do mapa (SPEC-009 §5.7).
   const presence = usePresenceStore(provider);
   const renderAll = useRenderAll();
@@ -312,6 +316,29 @@ export function MindMapCanvas({
     onCutEdge,
   ]);
 
+  // Câmera: usa a posição FINAL do bloco (não a do meio da animação) e só
+  // desliza — o zoom nunca muda sozinho, nem enquanto se digita.
+  useEffect(() => {
+    if (!followRef.current || !selectedId) return;
+    const pos = posById.get(selectedId);
+    const node = nodes[selectedId];
+    const el = wrapperRef.current;
+    if (!pos || !node || !el) return;
+    followRef.current = false;
+    const size =
+      measured.current.get(selectedId) ??
+      estimateSize(node.text, node.parentId === null, 0, node.shape ?? theme.shape, board.font.widthFactor);
+    const ox = pos.side === 'left' ? 1 : pos.side === 'root' ? 0.5 : 0;
+    const rect = el.getBoundingClientRect();
+    const viewport = getViewport();
+    const target = panToReveal(
+      viewport,
+      { width: rect.width, height: rect.height },
+      { x: pos.x - ox * size.width, y: pos.y - size.height / 2, width: size.width, height: size.height },
+    );
+    if (target) void setViewport({ ...target, zoom: viewport.zoom }, { duration: motionMs(DUR.slow) });
+  }, [selectedId, posById, nodes, theme.shape, board.font.widthFactor, getViewport, setViewport]);
+
   // ---------- navegação por setas ----------
   const visibleChildren = (id: string) => (nodes[id]?.collapsed ? [] : (index.get(id) ?? []));
   const byY = (list: PositionedNode[]) => [...list].sort((a, b) => a.y - b.y);
@@ -352,6 +379,7 @@ export function MindMapCanvas({
     pendingRef.current = '';
     newStep();
     if (addNode(doc, { id, parentId, afterId, side }, LOCAL_ORIGIN)) {
+      followRef.current = true;
       onSelect(id);
       setEditing({ id, draft: '' });
       focusCanvas(); // guarda as teclas até o campo do nó novo ganhar foco
@@ -512,7 +540,10 @@ export function MindMapCanvas({
       }
       if (!selectedId) return onSelect(id);
       const next = neighbor(id, e.key);
-      if (next) onSelect(next);
+      if (next) {
+        followRef.current = true;
+        onSelect(next);
+      }
       return;
     }
     if (e.key === 'Escape') {

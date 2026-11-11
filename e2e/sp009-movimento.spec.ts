@@ -140,3 +140,40 @@ test('"reduzir movimento": o mesmo irmão aparece sem animação', async ({ brow
   expect(tops.filter((y) => y > before + 1 && y < after - 1)).toEqual([]);
   await expect(page.locator('[data-animating="true"]')).toHaveCount(0);
 });
+
+const zoomOf = (page: Page) =>
+  page.locator('.react-flow__viewport').evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).a);
+
+test('câmera: o filho criado na borda termina dentro da tela, sem mudar o zoom', async ({ browser }) => {
+  const page = await newPage(browser, true);
+  await loginAdmin(page);
+  await newMindMap(page, 'Câmera');
+  await node(page, 'Câmera').click();
+  await addBlock(page, 'Tab', 'Na borda');
+  await settled(page);
+
+  // Arrasta o quadro até o bloco encostar na borda direita.
+  const pane = page.locator('.react-flow__pane');
+  const paneBox = (await pane.boundingBox())!;
+  const blockBox = await boxOf(page, 'Na borda');
+  const startX = paneBox.x + 60;
+  const startY = paneBox.y + paneBox.height - 60;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + (paneBox.x + paneBox.width - 20 - (blockBox.x + blockBox.width)), startY, { steps: 8 });
+  await page.mouse.up();
+
+  const zoom = await zoomOf(page);
+  await node(page, 'Na borda').click();
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('Neto visível');
+  await page.keyboard.press('Enter');
+  await settled(page);
+  await page.waitForTimeout(500); // a câmera desliza em ~320 ms
+
+  const neto = await boxOf(page, 'Neto visível');
+  expect(neto.x + neto.width).toBeLessThanOrEqual(paneBox.x + paneBox.width);
+  expect(neto.x).toBeGreaterThanOrEqual(paneBox.x);
+  expect(await zoomOf(page)).toBeCloseTo(zoom, 5);
+  await shot(page, 'sp009-camera');
+});
