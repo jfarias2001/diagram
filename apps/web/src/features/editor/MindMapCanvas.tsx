@@ -41,8 +41,40 @@ import { panToReveal } from './motion/camera';
 import { AnimatedReactFlow } from './motion/AnimatedFlow';
 import { PresenceContext, usePresenceStore } from './presence';
 import { LOCAL_ORIGIN } from './useMindMap';
+import { canUndoFromToast } from './undoToast';
+import { dismissToast, toast } from '../../components/toastStore';
 
 const nodeTypes = { mind: MindNode };
+/** A partir de quantos tópicos apagar um ramo guarda uma versão (PRD-009 §9.3). */
+export const CHECKPOINT_BRANCH = 20;
+
+/**
+ * "Desfazer" no aviso de uma exclusão. Só desfaz se o topo da pilha ainda for
+ * AQUELA exclusão: se a pessoa fez outra coisa depois, o aviso some — nunca
+ * desfaz uma ação diferente (SPEC-009 §5.6.5). O Ctrl+Z segue a ordem normal.
+ */
+function offerUndo(undo: Y.UndoManager, message: string) {
+  const item = undo.undoStack.at(-1);
+  if (!item) return;
+  const id = toast({
+    message,
+    action: {
+      label: 'Desfazer',
+      run: () => {
+        if (canUndoFromToast(undo.undoStack, item)) undo.undo();
+      },
+    },
+  });
+  const stale = () => {
+    if (!canUndoFromToast(undo.undoStack, item)) {
+      dismissToast(id);
+      undo.off('stack-item-added', stale);
+      undo.off('stack-item-popped', stale);
+    }
+  };
+  undo.on('stack-item-added', stale);
+  undo.on('stack-item-popped', stale);
+}
 const edgeTypes = { mind: MindEdge };
 
 interface Props {
@@ -167,6 +199,15 @@ export function MindMapCanvas({
   const onAddChild = useCallback((id: string) => actionsRef.current?.createChild(id), []);
   const onOpenNoteStable = useCallback((id: string) => actionsRef.current?.openNote(id), []);
   const onCutEdge = useCallback((childId: string) => actionsRef.current?.cutEdge(childId), []);
+  const onToggleCollapse = useCallback((id: string) => actionsRef.current?.toggleCollapse(id), []);
+  /** Quantos tópicos cada ramo recolhido esconde (SPEC-009 §5.6.4). */
+  const hidden = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const node of Object.values(nodes)) {
+      if (node.collapsed && (index.get(node.id)?.length ?? 0) > 0) out.set(node.id, branchIds(nodes, node.id).length - 1);
+    }
+    return out;
+  }, [nodes, index]);
   const dataCache = useRef(new Map<string, MindNodeData>());
   const edgeCache = useRef(new Map<string, MindEdgeData>());
   // Tamanho medido de cada nó. Sem ele, cada objeto de nó novo chega ao React Flow
@@ -244,7 +285,8 @@ export function MindMapCanvas({
           blocked: !!rewireBlocked?.has(node.id),
           picking: !!rewire && !rewireBlocked?.has(node.id),
           bold: node.bold ?? false,
-          hasHiddenChildren: !!node.collapsed && (index.get(node.id)?.length ?? 0) > 0,
+          hiddenCount: hidden.get(node.id) ?? 0,
+          canCollapse: !node.collapsed && (index.get(node.id)?.length ?? 0) > 0,
           editing: editing?.id === node.id,
           draft: editing?.id === node.id ? editing.draft : null,
           canEdit,
@@ -254,6 +296,7 @@ export function MindMapCanvas({
           takePending,
           onAddChild,
           onOpenNote: onOpenNoteStable,
+          onToggleCollapse,
         }),
       });
       // A ligação continua desenhada enquanto se arrasta (SPEC-007 §5.1): ela
@@ -314,6 +357,8 @@ export function MindMapCanvas({
     onAddChild,
     onOpenNoteStable,
     onCutEdge,
+    onToggleCollapse,
+    hidden,
   ]);
 
   // Câmera: usa a posição FINAL do bloco (não a do meio da animação) e só
@@ -400,7 +445,18 @@ export function MindMapCanvas({
 
   const actions: NodeActions = {
     createChild: (id) => {
-      if (canEdit && nodes[id]) createNode(id);
+      const node = nodes[id];
+      if (!canEdit || !node) return;
+      if (node.collapsed) {
+        // Filho num ramo recolhido: abre o ramo na MESMA transação — um Ctrl+Z
+        // desfaz os dois (SPEC-009 §5.6.4).
+        doc.transact(() => {
+          updateNode(doc, id, { collapsed: false }, LOCAL_ORIGIN);
+          createNode(id);
+        }, LOCAL_ORIGIN);
+        return;
+      }
+      createNode(id);
     },
     createSibling: (id) => {
       const node = nodes[id];
@@ -415,8 +471,15 @@ export function MindMapCanvas({
       if (!canEdit || !node?.parentId) return;
       const siblings = index.get(node.parentId) ?? [];
       const at = siblings.findIndex((s) => s.id === node.id);
+      const count = branchIds(nodes, node.id).length;
+      // Ramo grande: guarda uma versão antes (CLAUDE.md §7 — SPEC-009 §5.6.5).
+      if (count >= CHECKPOINT_BRANCH) {
+        const name = (node.text || 'sem título').slice(0, 40);
+        onCheckpoint?.(`Antes de apagar "${name}"`);
+      }
       newStep();
       deleteBranch(doc, node.id, LOCAL_ORIGIN);
+      if (count >= 2 && undo) offerUndo(undo, `${count} tópicos apagados.`);
       onSelect(siblings[at + 1]?.id ?? siblings[at - 1]?.id ?? node.parentId);
       focusCanvas();
     },

@@ -22,7 +22,10 @@ export type MindNodeData = {
   /** Modo religar: este bloco é um destino possível. */
   picking: boolean;
   bold: boolean;
-  hasHiddenChildren: boolean;
+  /** Ramo recolhido: quantos tópicos ele esconde (0 = aberto ou sem filhos). */
+  hiddenCount: number;
+  /** Tem filhos à vista (mostra o botão de recolher no hover). */
+  canCollapse: boolean;
   editing: boolean;
   /** Texto inicial ao começar a editar digitando (substitui o conteúdo). */
   draft: string | null;
@@ -36,6 +39,7 @@ export type MindNodeData = {
   /** Callbacks estáveis (SPEC-002 §5.4). */
   onAddChild: (id: string) => void;
   onOpenNote: (id: string) => void;
+  onToggleCollapse: (id: string) => void;
 };
 
 /** Marca um Enter apertado antes de o campo de texto ganhar foco. */
@@ -50,12 +54,14 @@ const hiddenHandle = '!h-1 !w-1 !min-h-0 !min-w-0 !border-0 !bg-transparent';
  * (sem estado React) e fica visível no nó selecionado, para funcionar no toque.
  * O atraso ao esconder deixa o mouse atravessar a folga até o botão.
  */
-function AddChildButton({ id, side, color, selected, onAdd }: {
+function AddChildButton({ id, side, color, selected, onAdd, offset = -26 }: {
   id: string;
   side: 'left' | 'right';
   color: string;
   selected: boolean;
   onAdd: (id: string) => void;
+  /** Distância da borda: com o botão de recolher ao lado, o "+" vai mais para fora. */
+  offset?: number;
 }) {
   return (
     <button
@@ -72,7 +78,7 @@ function AddChildButton({ id, side, color, selected, onAdd }: {
         'transition-[opacity,visibility,transform] delay-150 hover:scale-110 group-hover:visible group-hover:opacity-100 group-hover:delay-0',
         selected ? 'visible opacity-100' : 'invisible opacity-0',
       ].join(' ')}
-      style={{ borderColor: color, [side]: -26 }}
+      style={{ borderColor: color, [side]: offset }}
     >
       <IconPlus size={12} strokeWidth={3} />
     </button>
@@ -212,25 +218,122 @@ function MindNodeComponent({ id, data, selected }: NodeProps<MindFlowNode>) {
         </span>
       )}
 
-      {data.hasHiddenChildren && (
-        <span
-          className={`absolute top-1/2 flex h-4 min-w-4 -translate-y-1/2 items-center justify-center rounded-full px-1 text-2xs font-bold text-white ${canAdd ? 'group-hover:invisible' : ''} ${canAdd && selected ? 'invisible' : ''}`}
-          style={{ background: data.color, [data.side === 'left' ? 'left' : 'right']: -20 }}
-          title="Ramo recolhido (Espaço para abrir)"
-        >
-          +
-        </span>
+      {/* Ramo recolhido (SPEC-009 §5.6.4): o selo diz QUANTOS tópicos esconde e,
+          clicado, abre o ramo. O "+" nunca ocupa o lugar dele — era a armadilha
+          de quem tentava abrir e criava um tópico novo. */}
+      {data.hiddenCount > 0 && (
+        <CollapsedBadge
+          id={id}
+          count={data.hiddenCount}
+          side={data.side === 'left' ? 'left' : 'right'}
+          color={data.color}
+          canEdit={data.canEdit}
+          onToggle={data.onToggleCollapse}
+        />
       )}
 
-      {canAdd && (isRoot ? (['left', 'right'] as const) : [data.side as 'left' | 'right']).map((side) => (
-        <AddChildButton key={side} id={id} side={side} color={data.color} selected={!!selected} onAdd={data.onAddChild} />
-      ))}
+      {canAdd &&
+        data.hiddenCount === 0 &&
+        (isRoot ? (['left', 'right'] as const) : [data.side as 'left' | 'right']).map((side) => (
+          <AddChildButton
+            key={side}
+            id={id}
+            side={side}
+            color={data.color}
+            selected={!!selected}
+            onAdd={data.onAddChild}
+            offset={data.canCollapse && !isRoot ? -52 : -26}
+          />
+        ))}
+
+      {canAdd && data.canCollapse && !isRoot && (
+        <CollapseButton
+          id={id}
+          side={data.side === 'left' ? 'left' : 'right'}
+          color={data.color}
+          selected={!!selected}
+          onToggle={data.onToggleCollapse}
+        />
+      )}
 
       <Handle type="target" position={Position.Left} id="t-l" isConnectable={false} className={hiddenHandle} />
       <Handle type="target" position={Position.Right} id="t-r" isConnectable={false} className={hiddenHandle} />
       <Handle type="source" position={Position.Left} id="s-l" isConnectable={false} className={hiddenHandle} />
       <Handle type="source" position={Position.Right} id="s-r" isConnectable={false} className={hiddenHandle} />
     </div>
+  );
+}
+
+const chip =
+  'nodrag nopan export-hidden absolute top-1/2 z-10 flex h-[22px] min-w-[22px] -translate-y-1/2 items-center justify-center rounded-full border-2 shadow-sm';
+
+function CollapsedBadge({ id, count, side, color, canEdit, onToggle }: {
+  id: string;
+  count: number;
+  side: 'left' | 'right';
+  color: string;
+  canEdit: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const label = count > 99 ? '99+' : String(count);
+  const style = { background: color, borderColor: color, [side]: -26 };
+  const text = `${count} ${count === 1 ? 'tópico escondido' : 'tópicos escondidos'}`;
+  // Leitor não expande: recolher vale para todos no documento (PRD-009 §9.1).
+  if (!canEdit) {
+    return (
+      <span className={`${chip} px-1 text-2xs font-bold text-white`} style={style} title={`Ramo recolhido — ${text}`}>
+        {label}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-label={`Expandir ramo (${text})`}
+      title={`Expandir ramo — ${text} (Espaço)`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(id);
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+      className={`${chip} px-1 text-2xs font-bold text-white transition-transform duration-(--dur-micro) hover:scale-110 active:scale-95`}
+      style={style}
+    >
+      {label}
+    </button>
+  );
+}
+
+/** "–" no hover: recolhe o ramo (o "+" fica logo depois, mais para fora). */
+function CollapseButton({ id, side, color, selected, onToggle }: {
+  id: string;
+  side: 'left' | 'right';
+  color: string;
+  selected: boolean;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label="Recolher ramo"
+      title="Recolher ramo (Espaço)"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle(id);
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+      className={[
+        chip,
+        'bg-surface text-ink',
+        'transition-[opacity,visibility,transform] delay-150 hover:scale-110 group-hover:visible group-hover:opacity-100 group-hover:delay-0',
+        selected ? 'visible opacity-100' : 'invisible opacity-0',
+      ].join(' ')}
+      style={{ borderColor: color, [side]: -26 }}
+    >
+      <svg width={12} height={12} viewBox="0 0 24 24" aria-hidden>
+        <path d="M5 12h14" stroke="currentColor" strokeWidth={3} strokeLinecap="round" />
+      </svg>
+    </button>
   );
 }
 

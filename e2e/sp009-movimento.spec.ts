@@ -177,3 +177,58 @@ test('câmera: o filho criado na borda termina dentro da tela, sem mudar o zoom'
   expect(await zoomOf(page)).toBeCloseTo(zoom, 5);
   await shot(page, 'sp009-camera');
 });
+
+const blockCount = (page: Page) => page.locator('.react-flow__node:not(.node-ghost)').count();
+
+test('ramo recolhido: o selo diz quantos esconde e, clicado, ABRE (sem criar bloco)', async ({ browser }) => {
+  const page = await newPage(browser);
+  await loginAdmin(page);
+  await newMindMap(page, 'Selo');
+  await node(page, 'Selo').click();
+  await addBlock(page, 'Tab', 'Ramo');
+  await addBlock(page, 'Tab', 'F1');
+  for (let i = 2; i <= 7; i++) await addBlock(page, 'Enter', `F${i}`);
+
+  await node(page, 'Ramo').click();
+  await page.keyboard.press(' '); // Espaço recolhe
+  const badge = page.getByRole('button', { name: 'Expandir ramo (7 tópicos escondidos)' });
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveText('7');
+  const before = await blockCount(page);
+
+  // Passar o mouse NÃO troca o selo pelo "+" (a armadilha antiga).
+  await node(page, 'Ramo').hover();
+  await expect(badge).toBeVisible();
+  await badge.click();
+
+  await expect(node(page, 'F7')).toBeVisible();
+  expect(await blockCount(page)).toBe(before + 7);
+  await expect(page.getByRole('button', { name: /Expandir ramo/ })).toHaveCount(0);
+  await shot(page, 'sp009-selo');
+});
+
+test('apagar ramo de 25 tópicos: guarda versão antes e oferece Desfazer', async ({ browser }) => {
+  const page = await newPage(browser);
+  await loginAdmin(page);
+  await newMindMap(page, 'Exclusão');
+  await node(page, 'Exclusão').click();
+  await addBlock(page, 'Tab', 'Grande');
+  await addBlock(page, 'Tab', 'G1');
+  for (let i = 2; i <= 24; i++) await addBlock(page, 'Enter', `G${i}`);
+  await expect(page.getByText('Salvo')).toBeVisible();
+
+  await node(page, 'Grande').click();
+  await page.keyboard.press('Delete');
+  const toast = page.getByRole('status').filter({ hasText: '25 tópicos apagados.' });
+  await expect(toast).toBeVisible();
+  await expect(node(page, 'Grande')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Histórico' }).click();
+  const aside = page.getByRole('complementary', { name: 'Histórico de versões' });
+  await expect(aside.getByText('Antes de apagar "Grande"')).toBeVisible();
+
+  await toast.getByRole('button', { name: 'Desfazer' }).click();
+  // O ramo volta (só o que está na tela é desenhado; "Grande" está à vista).
+  await expect(node(page, 'Grande')).toBeVisible();
+  await shot(page, 'sp009-apagar-grande');
+});
