@@ -16,7 +16,7 @@ const VARIANTS: Record<Variant, string> = {
     'bg-[linear-gradient(120deg,var(--brand),var(--brand-2))] text-on-brand shadow-sm hover:brightness-110',
   secondary: 'border border-line bg-surface text-ink hover:bg-surface-2',
   ghost: 'text-ink hover:bg-surface-2',
-  danger: 'bg-danger text-white hover:opacity-90',
+  danger: 'bg-danger text-on-danger hover:opacity-90',
 };
 
 export function Button({

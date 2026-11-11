@@ -59,6 +59,7 @@ describe.each(['light', 'dark'] as const)('paleta da interface — modo %s', (mo
       'nav-muted',
       'on-brand',
       'danger',
+      'on-danger',
       'ok',
       'warn',
     ]) {
@@ -74,6 +75,10 @@ describe.each(['light', 'dark'] as const)('paleta da interface — modo %s', (mo
     for (const name of ['brand', 'brand-2']) {
       expect(contrastRatio(t['on-brand'] as string, t[name] as string)).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  it('o texto do botão de perigo é legível sobre o vermelho', () => {
+    expect(contrastRatio(t['on-danger'] as string, t.danger as string)).toBeGreaterThanOrEqual(4.5);
   });
 
   it('bordas se distinguem do fundo', () => {

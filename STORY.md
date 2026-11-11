@@ -25,10 +25,57 @@
 
 ## Estado atual (atualize a cada entrada)
 
-- **Fase:** SPEC-001 a 008 **todas implementadas e testadas** (415 testes + 14 E2E); ainda não publicadas na VPS.
+- **Fase:** SPEC-001 a 008 **todas implementadas e testadas** (415+ testes + 14 E2E); ainda não publicadas na VPS. PESQUISA-001 feita; PRD-009 em rascunho.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** primeiro deploy na VPS e PRD de backup do banco antes de liberar para a equipe.
+- **Próximo passo:** aprovação do **PRD-009 (movimento e acabamento)**, primeira onda do roteiro da PESQUISA-001; em paralelo, primeiro deploy na VPS e PRD de backup do banco.
+
+---
+
+## 2026-11-11 — Pesquisa de UX e concorrentes, roteiro em ondas e 3 bugs corrigidos
+**Tipo:** docs, fix, security
+**Refs:** PESQUISA-001, PRD-009 (rascunho)
+
+**O que mudou**
+- **Pesquisa com 5 agentes em paralelo** ([docs/research/PESQUISA-001-ux-e-concorrentes.md](docs/research/PESQUISA-001-ux-e-concorrentes.md)):
+  - 3 auditorias internas, só de leitura: visual/movimento, UX dos editores e inventário de funcionalidades;
+  - 2 pesquisas de mercado: mapa mental (MindMeister, Xmind, MindNode, Miro, Whimsical, Coggle, Ayoa, Mapify, Heptabase) e diagrama/quadro branco (Miro, Lucid, Whimsical, FigJam, draw.io, Excalidraw, tldraw, Eraser, com Notion e Linear como referência).
+  - Resultado: matrizes comparativas, um guia de movimento (durações e curvas) e um **roteiro em 7 ondas**, uma por PRD.
+- **PRD-009 — Movimento e acabamento** em `Rascunho`, aguardando aprovação: layout que flui, câmera que acompanha, recolher com contador, avisos com Desfazer, esqueletos de carregamento, Ctrl+K, Ctrl+F e `?`.
+- **Bug: Espaço apagava o texto da forma no fluxograma.**
+  - Com uma forma selecionada, segurar Espaço para mover o quadro (`panActivationKeyCode`) caía no "digitar para editar" e gravava " " no lugar do texto ao perder o foco.
+  - Agora Espaço e combinações com Ctrl/⌘ não iniciam edição (`DiagramCanvas.tsx`).
+- **Bug: `bg-brand-soft` não gerava CSS.**
+  - O token existia em `:root`, mas não no `@theme`, então o item "ligado" do menu em grade e o formato escolhido no Exportar ficavam sem fundo.
+  - Token registrado.
+- **Bug: contraste do botão de perigo no modo escuro.**
+  - Era texto branco sobre `#ff7a6e`, ≈ 2,5:1.
+  - Token novo `--on-danger` (branco no claro, quase preto no escuro) e teste de contraste novo em `tokens.test.ts`, nos dois modos.
+
+**Revisão de segurança**
+- Checklist CLAUDE.md §9 revisada no que mudou:
+  - nenhuma rota, consulta, permissão ou dependência nova;
+  - as mudanças são um token de CSS, uma classe de botão e uma condição de teclado no cliente;
+  - a autorização continua toda no servidor;
+  - nenhum `dangerouslySetInnerHTML`;
+  - a pesquisa de mercado não enviou nenhum dado do projeto ou de pessoas para fora: as buscas foram só sobre os produtos concorrentes.
+- `pnpm audit --prod`:
+  - **Antes:** 14 vulnerabilidades (1 crítica, 2 altas, 5 moderadas, 6 baixas), todas publicadas depois da SPEC-008:
+    - `dompurify` 3.4.16, que vem pelo `jspdf`;
+    - `zod` 4.6.5 (esgotamento de memória);
+    - `fastify` 5.12.5;
+    - `fast-uri` e `ip-address`, indiretas da API.
+  - **Corrigido:**
+    - `fastify` ^5.12.6 e `zod` ^4.6.6 nos três pacotes;
+    - *overrides* do pnpm para `dompurify` ≥3.4.17, `ip-address` ≥10.7.4 e `fast-uri` (≥3.1.9 / ≥4.2.3).
+  - **Depois:** **sem vulnerabilidades**.
+- Checks: typecheck, lint, **417 testes** (104 shared + 115 web + 198 api) e build verdes; **14 E2E** verdes.
+
+**Pendências / próximos passos**
+- [ ] **Aprovar o PRD-009** e responder às 4 perguntas da §9 dele; depois vem a SPEC-009.
+- [ ] O bug do Espaço não ganhou teste automático (o tratamento de teclado do fluxograma só tem cobertura E2E); entra no E2E da SPEC-009.
+- [ ] Ondas 2 a 7 do roteiro (PESQUISA-001 §5); a de IA exige ADR sobre provedor e privacidade.
+- [ ] Primeiro deploy na VPS e PRD de backup do banco.
 
 ---
 

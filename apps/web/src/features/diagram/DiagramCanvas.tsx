@@ -565,7 +565,9 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
     } else if (shape && (e.key === 'F2' || e.key === 'Enter')) {
       e.preventDefault();
       setEditing({ kind: 'shape', id: shape.id, draft: null });
-    } else if (shape && e.key.length === 1 && !e.altKey) {
+    } else if (shape && e.key.length === 1 && e.key !== ' ' && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      // Espaço é a tecla de mover o quadro (panActivationKeyCode): não pode virar
+      // "digitar para editar", senão o texto da forma é trocado por " " ao soltar.
       e.preventDefault();
       setEditing({ kind: 'shape', id: shape.id, draft: e.key });
     } else if (selection.edges.length === 1 && (e.key === 'F2' || e.key === 'Enter')) {
