@@ -89,7 +89,7 @@ function ShapeNodeComponent({ id, data, selected }: NodeProps<ShapeFlowNode>) {
         <>
           <div className="pointer-events-none absolute -inset-1 rounded-md" style={{ outline: `2px dashed ${peer.color}` }} aria-hidden />
           <span
-            className="pointer-events-none absolute -top-5 left-0 rounded px-1.5 py-px text-[10px] font-medium whitespace-nowrap text-white"
+            className="pointer-events-none absolute -top-5 left-0 rounded px-1.5 py-px text-2xs font-medium whitespace-nowrap text-white"
             style={{ background: peer.color }}
           >
             {data.peers.map((p) => p.name.split(' ')[0]).join(', ')}

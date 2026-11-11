@@ -126,10 +126,27 @@ const STATUS: Record<SaveStatus, { label: string; dot: string }> = {
 
 function StatusPill({ status, readOnly }: { status: SaveStatus; readOnly: boolean }) {
   const s = STATUS[status];
+  const label = readOnly ? 'Somente leitura' : s.label;
+  // No celular o texto não cabe: fica o ponto colorido, e tocar mostra o texto
+  // (SPEC-009 §5.5 — o estado de salvamento é sempre visível, CLAUDE.md §7).
+  const [peek, setPeek] = useState(false);
+  useEffect(() => {
+    if (!peek) return;
+    const t = setTimeout(() => setPeek(false), 3000);
+    return () => clearTimeout(t);
+  }, [peek]);
   return (
-    <span className="hidden items-center gap-2 text-xs text-muted md:flex" role="status" aria-live="polite">
-      <span className={`h-2 w-2 rounded-full ${s.dot}`} />
-      {readOnly ? 'Somente leitura' : s.label}
+    <span className="flex items-center gap-2 text-xs text-muted" role="status" aria-live="polite">
+      <button
+        type="button"
+        onClick={() => setPeek((p) => !p)}
+        title={label}
+        aria-label={`Estado: ${label}`}
+        className="flex h-6 w-6 items-center justify-center rounded-full md:pointer-events-none md:h-auto md:w-auto"
+      >
+        <span className={`h-2 w-2 rounded-full transition-colors duration-(--dur-base) ${s.dot}`} />
+      </button>
+      <span className={`${peek ? 'animate-fade-in' : 'hidden'} md:inline`}>{label}</span>
     </span>
   );
 }

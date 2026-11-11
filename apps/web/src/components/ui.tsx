@@ -10,6 +10,12 @@ import {
 import { usePresence } from './usePresence';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type Size = 'sm' | 'md';
+
+const SIZES: Record<Size, string> = {
+  sm: 'h-8 px-2.5 text-xs',
+  md: 'h-9 px-3.5 text-sm',
+};
 
 // SPEC-008 §5.1: a ação principal é o degradê azul→violeta da marca.
 const VARIANTS: Record<Variant, string> = {
@@ -23,16 +29,18 @@ const VARIANTS: Record<Variant, string> = {
 export function Button({
   variant = 'secondary',
   className = '',
+  size = 'md',
   busy = false,
   children,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; busy?: boolean }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: Size; busy?: boolean }) {
   return (
     <button
       type="button"
       {...props}
       disabled={props.disabled || busy}
-      className={`inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${VARIANTS[variant]} ${className}`}
+      // SPEC-009 §5.5: retorno ao pressionar (escala 0,97) e foco visível.
+      className={`inline-flex items-center justify-center gap-2 rounded-control font-medium transition-[transform,background-color,filter,opacity,color] duration-(--dur-micro) ease-out active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 ${SIZES[size]} ${VARIANTS[variant]} ${className}`}
     >
       {busy && <Spinner />}
       {children}
@@ -90,7 +98,7 @@ export function Field({
 }
 
 const inputClass =
-  'h-10 min-w-0 rounded-lg border border-line bg-surface px-3 text-sm text-ink placeholder:text-muted focus:border-brand focus:outline-none';
+  'h-10 min-w-0 rounded-control border border-line bg-surface px-3 text-sm text-ink transition-[border-color,box-shadow] duration-(--dur-micro) placeholder:text-muted focus:border-brand focus:ring-[3px] focus:ring-brand-soft focus:outline-none aria-invalid:border-danger';
 
 /** Ocupa a largura toda, salvo quando `className` define outra. */
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
@@ -209,7 +217,7 @@ export function Avatar({ name, color, size = 28 }: { name: string; color?: strin
   return (
     <span
       title={name}
-      className="inline-flex shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white ring-2 ring-surface"
+      className="inline-flex shrink-0 items-center justify-center rounded-full text-2xs font-semibold text-white ring-2 ring-surface"
       style={{ width: size, height: size, background: color ?? colorFor(name) }}
     >
       {initials(name)}

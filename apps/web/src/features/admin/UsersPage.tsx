@@ -104,7 +104,7 @@ export function UsersPage() {
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"
-                          className="h-8 text-xs"
+                          size="sm"
                           disabled={!u.active}
                           onClick={async () => {
                             const ok = await confirm({

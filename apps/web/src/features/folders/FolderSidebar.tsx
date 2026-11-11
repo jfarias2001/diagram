@@ -2,7 +2,6 @@ import type { FolderKind, FolderNode, FolderTree } from '@diagram/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import {
-  IconChevronDown,
   IconChevronRight,
   IconFolder,
   IconFolderPlus,
@@ -116,13 +115,13 @@ function Section({
   return (
     <div className="mt-4 flex flex-col gap-0.5">
       <div className="flex items-center justify-between gap-2 px-3 pb-1">
-        <h2 className="text-[11px] font-semibold tracking-wider text-nav-muted uppercase">{title}</h2>
+        <h2 className="text-2xs font-semibold tracking-wider text-nav-muted uppercase">{title}</h2>
         <button
           type="button"
           onClick={() => onCreate(kind, null)}
           aria-label={`Criar pasta em ${title}`}
           title={`Criar pasta em ${title}`}
-          className="rounded-md p-1 text-nav-muted hover:bg-white/10 hover:text-nav-ink"
+          className="rounded-md p-1 text-nav-muted hover:bg-nav-active hover:text-nav-ink"
         >
           <IconFolderPlus size={15} />
         </button>
@@ -207,7 +206,10 @@ function FolderRow({
             aria-expanded={open}
             className="flex w-4 shrink-0 justify-center text-nav-muted hover:text-nav-ink"
           >
-            {open ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+            <IconChevronRight
+              size={14}
+              className={`transition-transform duration-(--dur-fast) ease-out ${open ? 'rotate-90' : ''}`}
+            />
           </button>
         ) : (
           <span className="w-4 shrink-0" aria-hidden />
@@ -218,8 +220,8 @@ function FolderRow({
           aria-current={selectedId === node.id}
           className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition ${
             selectedId === node.id
-              ? 'bg-white/12 font-medium text-nav-ink'
-              : 'text-nav-muted hover:bg-white/8 hover:text-nav-ink'
+              ? 'bg-nav-active font-medium text-nav-ink'
+              : 'text-nav-muted hover:bg-nav-hover hover:text-nav-ink'
           }`}
         >
           <IconFolder size={15} className="shrink-0" />
@@ -248,8 +250,14 @@ function FolderRow({
           )}
         />
       </div>
-      {open && hasChildren && (
-        <ul>
+      {hasChildren && (
+        // Abre e fecha deslizando (grid 0fr → 1fr, SPEC-009 §5.5); fechada, a
+        // subárvore fica inerte: fora do teclado e do leitor de tela.
+        <div
+          className="grid transition-[grid-template-rows] duration-(--dur-base) ease-out"
+          style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
+        >
+        <ul className="min-h-0 overflow-hidden" inert={!open}>
           {node.children.map((child) => (
             <FolderRow
               key={child.id}
@@ -263,6 +271,7 @@ function FolderRow({
             />
           ))}
         </ul>
+        </div>
       )}
     </li>
   );
@@ -275,7 +284,7 @@ function SidebarItem({ label, active, onClick }: { label: string; active: boolea
       onClick={onClick}
       aria-current={active}
       className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition ${
-        active ? 'bg-white/12 font-medium text-nav-ink' : 'text-nav-muted hover:bg-white/8 hover:text-nav-ink'
+        active ? 'bg-nav-active font-medium text-nav-ink' : 'text-nav-muted hover:bg-nav-hover hover:text-nav-ink'
       }`}
     >
       {label}
@@ -315,7 +324,7 @@ export function FolderBreadcrumb({
         </span>
       ))}
       {current.depth + 1 < 3 && (current.kind === 'PERSONAL' || current.myRole === 'OWNER' || current.myRole === 'EDITOR') && (
-        <Button className="ml-2 !h-7 !px-2 text-xs" onClick={onNewFolder}>
+        <Button size="sm" className="ml-2" onClick={onNewFolder}>
           + Subpasta
         </Button>
       )}

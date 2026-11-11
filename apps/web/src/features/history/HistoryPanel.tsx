@@ -65,7 +65,7 @@ export function HistoryPanel({
   return (
     <aside
       aria-label="Histórico de versões"
-      className="absolute inset-y-0 right-0 z-20 flex w-full flex-col border-l border-line bg-surface shadow-lg sm:w-[360px]"
+      className="absolute inset-y-0 right-0 z-20 flex w-full animate-[slide-in-right_var(--dur-slow)_var(--ease-drawer)_both] flex-col border-l border-line bg-surface shadow-modal sm:w-[360px]"
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === 'Escape') onClose();

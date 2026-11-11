@@ -286,7 +286,7 @@ function FontRow({
       <span className="text-base" style={{ fontFamily: font.stack }}>
         Mapa de ideias
       </span>
-      <span className="shrink-0 text-[11px] text-muted">{font.name}</span>
+      <span className="shrink-0 text-2xs text-muted">{font.name}</span>
     </button>
   );
 }

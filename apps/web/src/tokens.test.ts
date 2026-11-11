@@ -1,5 +1,5 @@
 import { contrastRatio } from '@diagram/shared';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 // SPEC-008 §5.1 — a paleta da interface é lida do próprio index.css e conferida
@@ -120,5 +120,27 @@ describe('movimento (SPEC-009 §5.1)', () => {
     expect(block).toContain('animation-duration: 1ms !important');
     expect(block).toContain('transition-duration: 1ms !important');
     expect(block).toContain('::view-transition-old(*)');
+  });
+});
+
+describe('escalas únicas (SPEC-009 §5.1)', () => {
+  const root = new URL('./', import.meta.url);
+  const files = (readdirSync(root, { recursive: true }) as string[])
+    .filter((f) => f.endsWith('.tsx'))
+    .map((f) => ({ f, src: readFileSync(new URL(f.replaceAll('\\', '/'), root), 'utf8') }));
+
+  it('nenhum tamanho de texto solto de 10/11 px — use text-2xs', () => {
+    const offenders = files.filter(({ src }) => /text-\[1[01]px\]/.test(src)).map(({ f }) => f);
+    expect(offenders).toEqual([]);
+  });
+
+  it('estados da lateral usam os tokens, não branco translúcido fixo', () => {
+    const offenders = files.filter(({ src }) => /bg-white\/(8|10|12)/.test(src)).map(({ f }) => f);
+    expect(offenders).toEqual([]);
+  });
+
+  it('nenhuma caixa de diálogo do navegador', () => {
+    const offenders = files.filter(({ src }) => /window\.(confirm|alert)\(/.test(src)).map(({ f }) => f);
+    expect(offenders).toEqual([]);
   });
 });

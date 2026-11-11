@@ -204,7 +204,7 @@ function MindNodeComponent({ id, data, selected }: NodeProps<MindFlowNode>) {
 
       {peer && (
         <span
-          className="pointer-events-none absolute -top-5 left-2 rounded px-1.5 py-px text-[10px] font-medium whitespace-nowrap text-white"
+          className="pointer-events-none absolute -top-5 left-2 rounded px-1.5 py-px text-2xs font-medium whitespace-nowrap text-white"
           style={{ background: peer.color }}
         >
           {data.peers.map((p) => p.name.split(' ')[0]).join(', ')}
@@ -213,7 +213,7 @@ function MindNodeComponent({ id, data, selected }: NodeProps<MindFlowNode>) {
 
       {data.hasHiddenChildren && (
         <span
-          className={`absolute top-1/2 flex h-4 min-w-4 -translate-y-1/2 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${canAdd ? 'group-hover:invisible' : ''} ${canAdd && selected ? 'invisible' : ''}`}
+          className={`absolute top-1/2 flex h-4 min-w-4 -translate-y-1/2 items-center justify-center rounded-full px-1 text-2xs font-bold text-white ${canAdd ? 'group-hover:invisible' : ''} ${canAdd && selected ? 'invisible' : ''}`}
           style={{ background: data.color, [data.side === 'left' ? 'left' : 'right']: -20 }}
           title="Ramo recolhido (Espaço para abrir)"
         >

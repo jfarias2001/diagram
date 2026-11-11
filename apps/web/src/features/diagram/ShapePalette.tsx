@@ -61,7 +61,7 @@ export function ShapePalette({
               e.preventDefault();
               setDrag({ kind, x: e.clientX, y: e.clientY, moved: false });
             }}
-            className="flex cursor-grab touch-none flex-col items-center gap-1 rounded-lg p-1.5 text-[10px] text-muted transition hover:bg-surface-2 hover:text-ink active:cursor-grabbing"
+            className="flex cursor-grab touch-none flex-col items-center gap-1 rounded-lg p-1.5 text-2xs text-muted transition hover:bg-surface-2 hover:text-ink active:cursor-grabbing"
           >
             <ShapePreview kind={kind} />
             <span className="w-full truncate text-center leading-tight">{SHAPE_LABEL[kind]}</span>

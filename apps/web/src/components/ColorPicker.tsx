@@ -193,7 +193,7 @@ function Swatches({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[11px] text-muted">{label}</span>
+      <span className="text-2xs text-muted">{label}</span>
       <div className="flex flex-wrap gap-1" role="group" aria-label={label}>
         {colors.map((color) => (
           <button

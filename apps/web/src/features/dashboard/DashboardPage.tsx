@@ -530,7 +530,7 @@ function DocumentItem({
     >
       <div className="relative flex h-24 items-center justify-center text-white/90" style={coverStyle(doc.theme)}>
         <Icon size={34} />
-        <span className="absolute top-2 left-2 rounded-md bg-black/25 px-2 py-0.5 text-[11px] font-medium backdrop-blur">
+        <span className="absolute top-2 left-2 rounded-md bg-black/25 px-2 py-0.5 text-2xs font-medium backdrop-blur">
           {TYPE_LABEL[doc.type]}
         </span>
       </div>
