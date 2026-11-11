@@ -39,7 +39,9 @@ import { useRenderAll } from '../export/renderAll';
 import { DUR, motionMs, useReducedMotion } from '../../lib/motion';
 import { panToReveal } from './motion/camera';
 import { AnimatedReactFlow } from './motion/AnimatedFlow';
+import { MapSearch } from './MapSearch';
 import { PresenceContext, usePresenceStore } from './presence';
+import { MAX_HITS, searchNodes, withLocalExpand } from './search';
 import { LOCAL_ORIGIN } from './useMindMap';
 import { canUndoFromToast } from './undoToast';
 import { dismissToast, toast } from '../../components/toastStore';
@@ -151,7 +153,16 @@ export function MindMapCanvas({
     (id: string, text: string | null) => {
       if (text !== null && canEdit) updateNode(doc, id, { text: text.trim() }, LOCAL_ORIGIN);
       setEditing(null);
-      requestAnimationFrame(() => wrapperRef.current?.focus({ preventScroll: true }));
+      const wrapper = wrapperRef.current;
+      const active = document.activeElement;
+      if (active instanceof HTMLTextAreaElement && wrapper?.contains(active)) {
+        // Confirmou pelo teclado (Enter/Esc no campo do bloco): o foco volta ao
+        // quadro NA HORA — esperar um frame perdia o Enter seguinte de quem
+        // digita rápido ("Enter, Enter" para criar o próximo irmão).
+        wrapper.focus({ preventScroll: true });
+      } else {
+        requestAnimationFrame(() => wrapperRef.current?.focus({ preventScroll: true }));
+      }
     },
     [doc, canEdit],
   );
@@ -163,11 +174,25 @@ export function MindMapCanvas({
     () => resolveSides(rootId ? (index.get(rootId) ?? []) : []),
     [index, rootId],
   );
+  // Busca no documento (SPEC-009 §5.9). O resultado atual, se estiver num ramo
+  // recolhido, é revelado SÓ NO DESENHO LOCAL (`view`) — o Y.Doc não muda.
+  const [search, setSearch] = useState<{ query: string; index: number } | null>(null);
+  const searchQuery = search?.query ?? '';
+  const hits = useMemo(() => (searchQuery ? searchNodes(nodes, searchQuery) : []), [nodes, searchQuery]);
+  const currentHit = search && hits.length > 0 ? (hits[((search.index % hits.length) + hits.length) % hits.length] ?? null) : null;
+  const hitClass = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const id of hits.slice(0, MAX_HITS)) out.set(id, 'search-hit');
+    if (currentHit) out.set(currentHit, 'search-hit search-current');
+    return out;
+  }, [hits, currentHit]);
+  const view = useMemo(() => withLocalExpand(nodes, currentHit), [nodes, currentHit]);
+
   // Layout automático + deslocamentos manuais (SPEC-006 §2.2), com a folga da
   // fonte em uso (SPEC-007 §5.4).
   const positions = useMemo(
-    () => resolvePositions(nodes, board.font.widthFactor),
-    [nodes, board.font.widthFactor],
+    () => resolvePositions(view, board.font.widthFactor),
+    [view, board.font.widthFactor],
   );
   const posById = useMemo(() => new Map(positions.map((p) => [p.id, p])), [positions]);
 
@@ -203,11 +228,11 @@ export function MindMapCanvas({
   /** Quantos tópicos cada ramo recolhido esconde (SPEC-009 §5.6.4). */
   const hidden = useMemo(() => {
     const out = new Map<string, number>();
-    for (const node of Object.values(nodes)) {
-      if (node.collapsed && (index.get(node.id)?.length ?? 0) > 0) out.set(node.id, branchIds(nodes, node.id).length - 1);
+    for (const node of Object.values(view)) {
+      if (node.collapsed && (index.get(node.id)?.length ?? 0) > 0) out.set(node.id, branchIds(view, node.id).length - 1);
     }
     return out;
-  }, [nodes, index]);
+  }, [view, index]);
   const dataCache = useRef(new Map<string, MindNodeData>());
   const edgeCache = useRef(new Map<string, MindEdgeData>());
   // Tamanho medido de cada nó. Sem ele, cada objeto de nó novo chega ao React Flow
@@ -240,7 +265,7 @@ export function MindMapCanvas({
     const flowNodes: MindFlowNode[] = [];
     const flowEdges: MindFlowEdge[] = [];
     for (const pos of positions) {
-      const node = nodes[pos.id];
+      const node = view[pos.id];
       if (!node) continue;
       const paint = painted.get(node.id);
       const color = paint?.color ?? theme.rootColor;
@@ -254,6 +279,7 @@ export function MindMapCanvas({
       flowNodes.push({
         id: node.id,
         type: 'mind',
+        ...(hitClass.has(node.id) ? { className: hitClass.get(node.id) } : {}),
         position: moving ? { x: pos.x + dragDelta.x, y: pos.y + dragDelta.y } : { x: pos.x, y: pos.y },
         origin: [pos.side === 'left' ? 1 : pos.side === 'root' ? 0.5 : 0, 0.5],
         selected: node.id === selectedId,
@@ -338,7 +364,6 @@ export function MindMapCanvas({
     return { flowNodes, flowEdges };
   }, [
     positions,
-    nodes,
     painted,
     theme,
     board.font.widthFactor,
@@ -359,6 +384,8 @@ export function MindMapCanvas({
     onCutEdge,
     onToggleCollapse,
     hidden,
+    view,
+    hitClass,
   ]);
 
   // Câmera: usa a posição FINAL do bloco (não a do meio da animação) e só
@@ -383,6 +410,28 @@ export function MindMapCanvas({
     );
     if (target) void setViewport({ ...target, zoom: viewport.zoom }, { duration: motionMs(DUR.slow) });
   }, [selectedId, posById, nodes, theme.shape, board.font.widthFactor, getViewport, setViewport]);
+
+  // Resultado atual da busca: seleciona e leva a câmera até ele.
+  useEffect(() => {
+    if (!currentHit) return;
+    followRef.current = true;
+    onSelect(currentHit);
+  }, [currentHit, onSelect]);
+
+  // Ctrl+F com o foco no editor abre a busca do documento, não a do navegador.
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'f') return;
+      const active = document.activeElement;
+      const inEditor = !active || active === document.body || !!wrapperRef.current?.closest('[data-board]')?.contains(active);
+      if (!inEditor) return;
+      e.preventDefault();
+      setSearch((current) => current ?? { query: '', index: 0 });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const setSearchQuery = useCallback((query: string) => setSearch((s) => (s ? { query, index: 0 } : s)), []);
 
   // ---------- navegação por setas ----------
   const visibleChildren = (id: string) => (nodes[id]?.collapsed ? [] : (index.get(id) ?? []));
@@ -768,6 +817,18 @@ export function MindMapCanvas({
           }}
           canTidy={hasManualPositions}
         />
+        {search && (
+          <MapSearch
+            count={hits.length}
+            index={currentHit ? hits.indexOf(currentHit) : 0}
+            onQuery={setSearchQuery}
+            onStep={(delta) => setSearch((s) => (s ? { ...s, index: s.index + delta } : s))}
+            onClose={() => {
+              setSearch(null);
+              focusCanvas();
+            }}
+          />
+        )}
         {rewire && (
           <Panel position="top-center" className="export-hidden !mt-3">
             <div

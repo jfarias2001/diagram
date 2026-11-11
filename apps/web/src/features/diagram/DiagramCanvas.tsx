@@ -36,7 +36,10 @@ import { stableData } from '../editor/stableData';
 import { PresenceContext, usePresenceStore } from '../editor/presence';
 import { useRenderAll } from '../export/renderAll';
 import { AnimatedReactFlow } from '../editor/motion/AnimatedFlow';
-import { useReducedMotion } from '../../lib/motion';
+import { DUR, motionMs, useReducedMotion } from '../../lib/motion';
+import { MapSearch } from '../editor/MapSearch';
+import { panToReveal } from '../editor/motion/camera';
+import { MAX_HITS, searchDiagram } from '../editor/search';
 import { LOCAL_ORIGIN } from '../editor/useMindMap';
 import { alignmentSnap, boundingBox, type Guide } from './alignment';
 import { autoLayout, GRID } from './autoLayout';
@@ -87,7 +90,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
     [theme],
   );
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getZoom } = useReactFlow();
+  const { screenToFlowPosition, getZoom, getViewport, setViewport } = useReactFlow();
   const [selection, setSelection] = useState<{ shapes: string[]; edges: string[] }>({ shapes: [], edges: [] });
   const [editing, setEditing] = useState<Editing>(null);
   const [draft, setDraft] = useState<Draft>({});
@@ -306,6 +309,61 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
     }
   }, [doc, canEdit, diagram, newStep, focusCanvas, onCheckpoint]);
 
+  // ---------- busca no documento (SPEC-009 §5.9) ----------
+  const [search, setSearch] = useState<{ query: string; index: number } | null>(null);
+  const searchQuery = search?.query ?? '';
+  const hits = useMemo(
+    () => (searchQuery ? searchDiagram(diagram.shapes, diagram.edges, searchQuery) : []),
+    [diagram.shapes, diagram.edges, searchQuery],
+  );
+  const currentHit =
+    search && hits.length > 0 ? (hits[((search.index % hits.length) + hits.length) % hits.length] ?? null) : null;
+  const hitClass = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const hit of hits.slice(0, MAX_HITS)) out.set(hit.id, 'search-hit');
+    if (currentHit) out.set(currentHit.id, 'search-hit search-current');
+    return out;
+  }, [hits, currentHit]);
+  const setSearchQuery = useCallback((query: string) => setSearch((s) => (s ? { query, index: 0 } : s)), []);
+
+  // Resultado atual: seleciona e leva a câmera até ele, sem mudar o zoom.
+  useEffect(() => {
+    if (!currentHit) return;
+    const box = (() => {
+      if (currentHit.kind === 'shape') {
+        const s = diagram.shapes[currentHit.id];
+        return s ? { x: s.x, y: s.y, width: s.w, height: s.h } : null;
+      }
+      const e = diagram.edges[currentHit.id];
+      const a = e && diagram.shapes[e.source];
+      const b = e && diagram.shapes[e.target];
+      if (!a || !b) return null;
+      const x = Math.min(a.x, b.x);
+      const y = Math.min(a.y, b.y);
+      return { x, y, width: Math.max(a.x + a.w, b.x + b.w) - x, height: Math.max(a.y + a.h, b.y + b.h) - y };
+    })();
+    setSelection(currentHit.kind === 'shape' ? { shapes: [currentHit.id], edges: [] } : { shapes: [], edges: [currentHit.id] });
+    const rect = wrapperRef.current?.getBoundingClientRect();
+    if (!box || !rect) return;
+    const viewport = getViewport();
+    const target = panToReveal(viewport, { width: rect.width, height: rect.height }, box);
+    if (target) void setViewport({ ...target, zoom: viewport.zoom }, { duration: motionMs(DUR.slow) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando o resultado atual muda
+  }, [currentHit?.id]);
+
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'f') return;
+      const active = document.activeElement;
+      const inEditor = !active || active === document.body || !!wrapperRef.current?.closest('[data-board]')?.contains(active);
+      if (!inEditor) return;
+      e.preventDefault();
+      setSearch((current) => current ?? { query: '', index: 0 });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // ---------- nós e conectores do React Flow ----------
   const dataCache = useRef(new Map<string, ShapeNodeData>());
   const edgeDataCache = useRef(new Map<string, FlowEdgeData>());
@@ -320,6 +378,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
       list.push({
         id: shape.id,
         type: 'shape',
+        ...(hitClass.has(shape.id) ? { className: hitClass.get(shape.id) } : {}),
         position: { x: d?.x ?? shape.x, y: d?.y ?? shape.y },
         width: w,
         height: h,
@@ -342,7 +401,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
       });
     }
     return list;
-  }, [diagram.shapes, draft, selection.shapes, canEdit, editing, commitShapeText, defaults]);
+  }, [diagram.shapes, draft, selection.shapes, canEdit, editing, commitShapeText, defaults, hitClass]);
 
   const edges = useMemo(() => {
     const selected = new Set(selection.edges);
@@ -352,6 +411,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
       return {
         id: edge.id,
         type: 'flow',
+        ...(hitClass.has(edge.id) ? { className: hitClass.get(edge.id) } : {}),
         source: edge.source,
         target: edge.target,
         sourceHandle: edge.sourceHandle,
@@ -373,7 +433,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
         }),
       };
     });
-  }, [diagram.edges, selection.edges, canEdit, editing, commitEdgeLabel, editEdgeLabel, defaults]);
+  }, [diagram.edges, selection.edges, canEdit, editing, commitEdgeLabel, editEdgeLabel, defaults, hitClass]);
 
   // ---------- arrastar, redimensionar, conectar ----------
   const draftRef = useRef(draft);
@@ -673,6 +733,18 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
           maxZoom={2.5}
         >
           <Background variant={BackgroundVariant.Dots} gap={GRID} size={1} color="var(--grid)" />
+          {search && (
+            <MapSearch
+              count={hits.length}
+              index={currentHit ? hits.findIndex((h) => h.id === currentHit.id) : 0}
+              onQuery={setSearchQuery}
+              onStep={(delta) => setSearch((s) => (s ? { ...s, index: s.index + delta } : s))}
+              onClose={() => {
+                setSearch(null);
+                focusCanvas();
+              }}
+            />
+          )}
           <DiagramControls
             undo={undo}
             canEdit={canEdit}

@@ -362,6 +362,17 @@ dialog[data-state='exit']::backdrop {
   animation-timing-function: var(--ease-out);
 }
 
+/* Busca no documento (SPEC-009 §5.9): resultados com brilho âmbar; o atual mais forte. */
+.react-flow__node.search-hit > * {
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--warn) 75%, transparent));
+}
+.react-flow__node.search-current > * {
+  filter: drop-shadow(0 0 2px var(--warn)) drop-shadow(0 0 10px color-mix(in srgb, var(--warn) 85%, transparent));
+}
+.react-flow__edge.search-hit path {
+  filter: drop-shadow(0 0 4px var(--warn));
+}
+
 /* Bloco que acabou de nascer no quadro (SPEC-009 §5.6.2). */
 .react-flow__node.node-born > * {
   animation: node-born var(--dur-fast) var(--ease-out) both;

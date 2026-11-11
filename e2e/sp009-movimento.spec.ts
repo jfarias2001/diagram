@@ -232,3 +232,48 @@ test('apagar ramo de 25 tópicos: guarda versão antes e oferece Desfazer', asyn
   await expect(node(page, 'Grande')).toBeVisible();
   await shot(page, 'sp009-apagar-grande');
 });
+
+test('Ctrl+F: revela o resultado escondido SÓ para quem busca', async ({ browser }) => {
+  const owner = await newPage(browser);
+  await loginAdmin(owner);
+  await newMindMap(owner, 'Busca');
+  await node(owner, 'Busca').click();
+  await addBlock(owner, 'Tab', 'Orçamento anual');
+  await addBlock(owner, 'Enter', 'Equipe');
+  await addBlock(owner, 'Tab', 'Cursos');
+  await addBlock(owner, 'Enter', 'Orçamento de cursos');
+  await node(owner, 'Equipe').click();
+  await addBlock(owner, 'Enter', 'Orçamento extra');
+  await node(owner, 'Equipe').click();
+  await owner.keyboard.press(' '); // recolhe "Equipe" — para todos
+  await expect(node(owner, 'Orçamento de cursos')).toHaveCount(0);
+  await expect(owner.getByText('Salvo')).toBeVisible();
+
+  // A "colega" é outra sessão no mesmo documento.
+  const url = owner.url();
+  const peer = await newPage(browser);
+  await loginAdmin(peer);
+  await peer.goto(url);
+  await expect(node(peer, 'Equipe')).toBeVisible();
+  await expect(node(peer, 'Orçamento de cursos')).toHaveCount(0);
+
+  await node(owner, 'Busca').click();
+  await owner.keyboard.press('Control+f');
+  const bar = owner.getByRole('search', { name: 'Buscar no documento' });
+  await bar.getByRole('textbox').fill('orcamento');
+  await expect(bar.getByText('1 de 3')).toBeVisible();
+  await owner.keyboard.press('Enter');
+  await expect(bar.getByText('2 de 3')).toBeVisible();
+  // O 2º resultado está no ramo recolhido: aparece para quem busca…
+  await expect(node(owner, 'Orçamento de cursos')).toBeVisible();
+  await shot(owner, 'sp009-busca');
+
+  // …e o ramo continua recolhido para a colega.
+  await peer.waitForTimeout(800);
+  await expect(node(peer, 'Orçamento de cursos')).toHaveCount(0);
+  await expect(peer.getByRole('button', { name: /Expandir ramo \(2 tópicos escondidos\)/ })).toBeVisible();
+
+  // Esc fecha a busca e o desenho volta a ser o do documento.
+  await owner.keyboard.press('Escape');
+  await expect(node(owner, 'Orçamento de cursos')).toHaveCount(0);
+});
