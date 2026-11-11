@@ -25,7 +25,6 @@ import {
   MarkerType,
   type EdgeChange,
   type NodeChange,
-  ReactFlow,
   useReactFlow,
   ViewportPortal,
 } from '@xyflow/react';
@@ -36,6 +35,8 @@ import { FIT_VIEW_OPTIONS } from '../editor/CanvasControls';
 import { stableData } from '../editor/stableData';
 import { PresenceContext, usePresenceStore } from '../editor/presence';
 import { useRenderAll } from '../export/renderAll';
+import { AnimatedReactFlow } from '../editor/motion/AnimatedFlow';
+import { useReducedMotion } from '../../lib/motion';
 import { LOCAL_ORIGIN } from '../editor/useMindMap';
 import { alignmentSnap, boundingBox, type Guide } from './alignment';
 import { autoLayout, GRID } from './autoLayout';
@@ -125,6 +126,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
 
   const presence = usePresenceStore(provider);
   const renderAll = useRenderAll();
+  const reducedMotion = useReducedMotion();
 
   // Seleção some junto com o que foi apagado (por mim ou por um colega).
   useEffect(() => {
@@ -599,7 +601,13 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
         aria-label="Fluxograma. Use Tab para a paleta de formas."
       >
         <PresenceContext.Provider value={presence}>
-        <ReactFlow
+        <AnimatedReactFlow
+          // "Organizar" e movimentos grandes de colegas deslizam (SPEC-009 §5.6.2).
+          // Setas (8 px) e o fim do arrasto ficam abaixo de 24 px: instantâneos.
+          animate={Object.keys(draft).length === 0 && !!provider && !reducedMotion}
+          hierarchy={false}
+          minDistance={24}
+          onAnimatingChange={(on) => wrapperRef.current?.setAttribute('data-animating', String(on))}
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
@@ -702,7 +710,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
             />
           )}
           <Guides guides={guides} />
-        </ReactFlow>
+        </AnimatedReactFlow>
         </PresenceContext.Provider>
 
         {canEdit && selectedEdge && !editing && (
