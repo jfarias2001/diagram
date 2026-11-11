@@ -216,6 +216,27 @@ describe('compartilhamento', () => {
     expect(demoteOwner.statusCode).toBe(409);
   });
 
+  // SPEC-009 §3 — o "Desfazer" do aviso usa as rotas de sempre; elas seguem
+  // recusando quem não pode. Um EDITOR não "desfaz" a remoção de um colega.
+  it('Desfazer remover membro: devolver o acesso exige OWNER', async () => {
+    const id = await setupDocument();
+    const removed = await call(app, actors.owner.cookie, 'DELETE', `/documents/${id}/members/${target.id}`);
+    expect(removed.statusCode).toBe(204);
+    const asEditor = await call(app, actors.editor.cookie, 'POST', `/documents/${id}/members`, { email: target.email, role: 'VIEWER' });
+    expect(asEditor.statusCode).toBe(403);
+    const asOwner = await call(app, actors.owner.cookie, 'POST', `/documents/${id}/members`, { email: target.email, role: 'VIEWER' });
+    expect(asOwner.statusCode).toBeLessThan(300);
+  });
+
+  it('Desfazer lixeira: só o dono restaura', async () => {
+    const id = await setupDocument();
+    expect((await call(app, actors.owner.cookie, 'POST', `/documents/${id}/trash`)).statusCode).toBeLessThan(300);
+    const asEditor = await call(app, actors.editor.cookie, 'POST', `/documents/${id}/restore`);
+    expect(asEditor.statusCode).toBeGreaterThanOrEqual(400);
+    const asOwner = await call(app, actors.owner.cookie, 'POST', `/documents/${id}/restore`);
+    expect(asOwner.statusCode).toBeLessThan(300);
+  });
+
   it('membro pode sair; dono não', async () => {
     const id = await setupDocument();
     expect((await call(app, actors.viewer.cookie, 'DELETE', `/documents/${id}/members/${actors.viewer.user.id}`)).statusCode).toBe(204);

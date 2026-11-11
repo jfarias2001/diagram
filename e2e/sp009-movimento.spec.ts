@@ -342,3 +342,203 @@ test('Ctrl+K: abre documento pelo nome; a leitora não vê ação de edição', 
   }
   await shot(leo, 'sp009-paleta-leitor');
 });
+
+const folderButton = (page: Page, name: string) =>
+  page.getByRole('navigation', { name: 'Pastas' }).getByRole('button', { name: new RegExp(`^${name}`) });
+
+async function createFolder(page: Page, section: 'Minhas pastas' | 'Pastas compartilhadas', name: string) {
+  await page.getByRole('button', { name: `Criar pasta em ${section}` }).click();
+  await page.getByLabel('Nome').fill(name);
+  await page.getByRole('button', { name: 'Salvar' }).click();
+  await expect(folderButton(page, name)).toBeVisible();
+}
+
+test('Desfazer: lixeira e mover voltam ao lugar; nada de caixa do navegador', async ({ browser }) => {
+  const page = await newPage(browser);
+  const nativeDialogs: string[] = [];
+  page.on('dialog', (d) => {
+    nativeDialogs.push(d.message());
+    void d.dismiss();
+  });
+  await loginAdmin(page);
+  const stamp = Date.now();
+  const mine = `Pessoal ${stamp}`;
+  const team = `Equipe ${stamp}`;
+  const title = `Relatório ${stamp}`;
+  await page.goto('/');
+  await createFolder(page, 'Minhas pastas', mine);
+  await createFolder(page, 'Pastas compartilhadas', team);
+
+  // Documento dentro da pasta pessoal.
+  await folderButton(page, mine).click();
+  await page.getByRole('button', { name: 'Criar', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Mapa mental/ }).click();
+  await page.getByLabel('Título').fill(title);
+  await page.getByRole('button', { name: 'Criar mapa' }).click();
+  await expect(page.getByText('Salvo')).toBeVisible();
+  await page.getByRole('link', { name: 'Voltar para os documentos' }).click();
+  await folderButton(page, mine).click();
+  const card = page.getByRole('link', { name: title });
+  await expect(card).toBeVisible();
+
+  // 1) Lixeira → Desfazer: volta para a MESMA pasta.
+  await page.getByRole('button', { name: `Ações de ${title}` }).click();
+  await page.getByRole('menuitem', { name: 'Mover para a lixeira' }).click();
+  const trashed = page.getByRole('status').filter({ hasText: 'foi para a lixeira' });
+  await expect(trashed).toBeVisible();
+  await expect(card).toHaveCount(0);
+  await trashed.getByRole('button', { name: 'Desfazer' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'voltou para o lugar de antes' })).toBeVisible();
+  await expect(card).toBeVisible();
+
+  // 2) Pessoal → compartilhada → Desfazer: volta para a pessoal e sai da compartilhada.
+  await page.getByRole('button', { name: `Ações de ${title}` }).click();
+  await page.getByRole('menuitem', { name: 'Mover para…' }).click();
+  await page.locator('dialog').getByRole('button', { name: team }).click();
+  const moved = page.getByRole('status').filter({ hasText: `Movido para "${team}"` });
+  await expect(moved).toBeVisible();
+  await moved.getByRole('button', { name: 'Desfazer' }).click();
+  await expect(page.getByRole('status').filter({ hasText: `De volta para "${mine}"` })).toBeVisible();
+  await folderButton(page, team).click();
+  await expect(page.getByRole('link', { name: title })).toHaveCount(0);
+  await folderButton(page, mine).click();
+  await expect(page.getByRole('link', { name: title })).toBeVisible();
+
+  // 3) Apagar de vez e apagar pasta pedem confirmação DO SISTEMA, com foco em Cancelar.
+  await page.getByRole('button', { name: `Ações de ${title}` }).click();
+  await page.getByRole('menuitem', { name: 'Mover para a lixeira' }).click();
+  await page.getByRole('button', { name: 'Lixeira' }).click();
+  await page.getByRole('button', { name: `Ações de ${title}` }).click();
+  await page.getByRole('menuitem', { name: 'Apagar de vez' }).click();
+  const confirm = page.getByRole('dialog', { name: `Apagar "${title}" de vez?` });
+  await expect(confirm.getByRole('button', { name: 'Cancelar' })).toBeFocused();
+  await confirm.getByRole('button', { name: 'Apagar de vez' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'foi apagado de vez' })).toBeVisible();
+
+  await page.getByRole('button', { name: `Opções da pasta ${mine}` }).click();
+  await page.getByRole('menuitem', { name: 'Apagar pasta' }).click();
+  await page
+    .getByRole('dialog', { name: `Apagar a pasta "${mine}"?` })
+    .getByRole('button', { name: 'Apagar pasta' })
+    .click();
+  await expect(folderButton(page, mine)).toHaveCount(0);
+
+  expect(nativeDialogs).toEqual([]);
+  await shot(page, 'sp009-desfazer');
+});
+
+test('teclado: Esc fecha o menu do cartão e devolve o foco ao botão de ações', async ({ browser }) => {
+  const page = await newPage(browser);
+  await loginAdmin(page);
+  const title = `Foco ${Date.now()}`;
+  await newMindMap(page, title);
+  await page.getByRole('link', { name: 'Voltar para os documentos' }).click();
+  const more = page.getByRole('button', { name: `Ações de ${title}` });
+  await more.focus();
+  await page.keyboard.press('Enter');
+  const menu = page.getByRole('menu', { name: `Ações de ${title}` });
+  await expect(menu.getByRole('menuitem').first()).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(more).toBeFocused();
+});
+
+test('celular: status visível, gaveta fecha com Esc e opções da pasta no toque', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const page = await context.newPage();
+  await loginAdmin(page);
+  const name = `Toque ${Date.now()}`;
+
+  const menuButton = page.getByRole('button', { name: 'Abrir menu' });
+  await menuButton.click();
+  await page.getByRole('button', { name: 'Criar pasta em Minhas pastas' }).click();
+  await page.getByLabel('Nome').fill(name);
+  await page.getByRole('button', { name: 'Salvar' }).click();
+  // Sem hover no toque: o botão de opções da pasta já está visível.
+  const options = page.getByRole('button', { name: `Opções da pasta ${name}` });
+  await expect(options).toBeVisible();
+  await options.tap();
+  await expect(page.getByRole('menuitem', { name: 'Renomear' })).toBeVisible();
+  await page.keyboard.press('Escape'); // fecha o menu
+  await page.keyboard.press('Escape'); // fecha a gaveta
+  await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+
+  // Editor no celular: o estado de salvamento continua visível (o ponto).
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Criar', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Mapa mental/ }).click();
+  await page.getByLabel('Título').fill(`Celular ${Date.now()}`);
+  await page.getByRole('button', { name: 'Criar mapa' }).click();
+  await expect(page.getByRole('button', { name: 'Estado: Salvo' })).toBeVisible();
+  await shot(page, 'sp009-celular');
+});
+
+test('fluxograma: segurar Espaço para mover o quadro não apaga o texto da forma', async ({ browser }) => {
+  const page = await newPage(browser);
+  await loginAdmin(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Criar', exact: true }).click();
+  await page.getByRole('menuitem', { name: /Fluxograma/ }).click();
+  await page.getByLabel('Título').fill('Espaço');
+  await page.getByRole('button', { name: 'Criar fluxograma' }).click();
+  await expect(page.getByText('Salvo')).toBeVisible();
+  await page.getByRole('button', { name: 'Processo', exact: true }).click();
+  await page.getByLabel('Texto da forma').fill('Etapa um');
+  await page.keyboard.press('Enter');
+  const etapa = page.locator('.react-flow__node').filter({ hasText: 'Etapa um' });
+  await etapa.click();
+
+  const pane = (await page.locator('.react-flow__pane').boundingBox())!;
+  await page.keyboard.down(' ');
+  await page.mouse.move(pane.x + 100, pane.y + pane.height - 80);
+  await page.mouse.down();
+  await page.mouse.move(pane.x + 260, pane.y + pane.height - 120, { steps: 6 });
+  await page.mouse.up();
+  await page.keyboard.up(' ');
+  await page.waitForTimeout(200);
+
+  await expect(etapa).toBeVisible();
+  await expect(page.getByLabel('Texto da forma')).toHaveCount(0);
+});
+
+/** Conta, durante a exportação, quantos blocos chegaram a estar no DOM ao mesmo tempo. */
+async function exportAndCountRendered(page: Page): Promise<number> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __maxNodes: number; __obs: MutationObserver };
+    w.__maxNodes = 0;
+    const count = () => {
+      w.__maxNodes = Math.max(w.__maxNodes, document.querySelectorAll('.react-flow__node:not(.node-ghost)').length);
+    };
+    w.__obs = new MutationObserver(count);
+    w.__obs.observe(document.body, { subtree: true, childList: true });
+  });
+  await page.getByRole('button', { name: 'Exportar' }).click();
+  await page.locator('dialog').getByRole('button', { name: /PNG/ }).first().click();
+  const wait = page.waitForEvent('download');
+  await page.locator('dialog').getByRole('button', { name: 'Exportar', exact: true }).click();
+  await wait;
+  return page.evaluate(() => (window as unknown as { __maxNodes: number }).__maxNodes);
+}
+
+test('exportar com zoom: a imagem inclui o que está fora da tela', async ({ browser }) => {
+  const page = await newPage(browser);
+  await loginAdmin(page);
+  await newMindMap(page, 'Exporta tudo');
+  await node(page, 'Exporta tudo').click();
+  await addBlock(page, 'Tab', 'Longe 1');
+  for (let i = 2; i <= 6; i++) await addBlock(page, 'Enter', `Longe ${i}`);
+  await node(page, 'Exporta tudo').click();
+  for (let i = 1; i <= 6; i++) await addBlock(page, 'Tab', `Fundo ${i}`);
+  await settled(page);
+  await page.getByRole('button', { name: 'Ajustar à tela' }).click();
+  await page.waitForTimeout(400);
+  const total = await page.locator('.react-flow__node').count();
+
+  // Aproxima muito: boa parte do mapa sai da tela (e deixa de ser desenhada).
+  for (let i = 0; i < 8; i++) await page.getByRole('button', { name: 'Aproximar' }).click();
+  await page.waitForTimeout(300);
+  expect(await page.locator('.react-flow__node').count()).toBeLessThan(total);
+
+  expect(await exportAndCountRendered(page)).toBe(total);
+});
