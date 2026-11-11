@@ -15,6 +15,7 @@ import { navButtonClass, SidebarSection, useSidebarSlot } from '../../components
 import {
   IconDocs,
   IconFlow,
+  IconFolder,
   IconGridView,
   IconListView,
   IconMindMap,
@@ -40,6 +41,7 @@ import { toast } from '../../components/toastStore';
 import { type MoveStep, undoMoveSteps } from './undoMove';
 import { CardsSkeleton, Deferred } from '../../components/Skeleton';
 import { withViewTransition } from '../../lib/viewTransition';
+import { useCommands } from '../../components/CommandPalette';
 
 type DocAction = 'trash' | 'restore' | 'delete' | 'duplicate';
 
@@ -214,6 +216,27 @@ export function DashboardPage() {
   });
 
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
+
+  // Paleta de comandos (SPEC-009 §5.10).
+  useCommands('dashboard', () => [
+    { id: 'new-map', label: 'Criar mapa mental', group: 'Criar', keywords: 'novo', icon: IconMindMap, run: () => setCreating('MINDMAP') },
+    { id: 'new-flow', label: 'Criar fluxograma', group: 'Criar', keywords: 'novo diagrama', icon: IconFlow, run: () => setCreating('DIAGRAM') },
+    {
+      id: 'new-folder',
+      label: 'Criar pasta',
+      group: 'Criar',
+      keywords: 'nova',
+      icon: IconFolder,
+      run: () => setFolderDialog({ mode: 'create', kind: 'PERSONAL', parentId: null }),
+    },
+    ...TABS.map((t) => ({
+      id: `tab:${t.scope}`,
+      label: t.label,
+      group: 'Ir para',
+      icon: t.icon,
+      run: () => setParam('aba', t.scope === 'mine' ? null : t.scope),
+    })),
+  ]);
 
   const sidebar = (
     <>

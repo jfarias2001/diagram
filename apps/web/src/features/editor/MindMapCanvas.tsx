@@ -32,7 +32,10 @@ import { CanvasControls, FIT_VIEW_OPTIONS } from './CanvasControls';
 import { type MindEdgeData, MindEdge, type MindFlowEdge } from './MindEdge';
 import { estimateSize, offsetsForSoloMove, type PositionedNode, resolvePositions } from './layout';
 import { type MindFlowNode, MindNode, type MindNodeData, PENDING_ENTER } from './MindNode';
-import { type NodeActions, NodeActionBar } from './NodeActionBar';
+import { type MenuContext, mindMenuGroups, type NodeActions, NodeActionBar, type PopoverRequest } from './NodeActionBar';
+import { useCommands } from '../../components/CommandPalette';
+import type { Command } from '../../components/commands';
+import { IconFit, IconSearch, IconTidy } from '../../components/icons';
 import { stableData } from './stableData';
 import { edgeWidthForDepth } from './taper';
 import { useRenderAll } from '../export/renderAll';
@@ -126,7 +129,7 @@ export function MindMapCanvas({
     pendingRef.current = '';
     return text;
   }, []);
-  const { getIntersectingNodes, getViewport, setViewport } = useReactFlow();
+  const { getIntersectingNodes, getViewport, setViewport, fitView } = useReactFlow();
   // A câmera acompanha a seleção que mudou por CRIAÇÃO ou SETAS — não por
   // clique: quem clicou já está vendo o bloco (SPEC-009 §5.6.3).
   const followRef = useRef(false);
@@ -684,6 +687,10 @@ export function MindMapCanvas({
     } else if (mod && (e.key === 'b' || e.key === 'B')) {
       e.preventDefault();
       actions.toggleBold(node.id);
+    } else if (e.key === '?' && !selectedId) {
+      // Sem seleção, "?" abre a lista de atalhos (SPEC-009 §5.11) — o
+      // ShortcutHint escuta a tecla na janela.
+      return;
     } else if (e.key.length === 1 && !mod && !e.altKey) {
       // Digitar com um nó selecionado começa a editar, substituindo o texto.
       e.preventDefault();
@@ -734,6 +741,62 @@ export function MindMapCanvas({
 
   const selectedNode = selectedId ? nodes[selectedId] : undefined;
   const hasManualPositions = useMemo(() => Object.values(nodes).some((n) => n.dx !== undefined), [nodes]);
+
+  // Paleta de comandos (SPEC-009 §5.10): as ações do tópico selecionado são as
+  // MESMAS do menu em grade — já filtradas por papel (o leitor só vê nota e link).
+  const [popoverRequest, setPopoverRequest] = useState<PopoverRequest | null>(null);
+  useCommands('mind-map', () => {
+    const out: Command[] = [
+      {
+        id: 'search',
+        label: 'Buscar no documento',
+        group: 'Documento',
+        shortcut: 'Ctrl+F',
+        icon: IconSearch,
+        run: () => setSearch((s) => s ?? { query: '', index: 0 }),
+      },
+      {
+        id: 'fit',
+        label: 'Ajustar à tela',
+        group: 'Documento',
+        icon: IconFit,
+        keywords: 'zoom enquadrar',
+        run: () => void fitView({ ...FIT_VIEW_OPTIONS, duration: motionMs(DUR.base) }),
+      },
+    ];
+    const root = findRoot(nodes);
+    if (canEdit && root && hasManualPositions) {
+      out.push({ id: 'tidy-map', label: 'Organizar o mapa', group: 'Documento', icon: IconTidy, run: () => actions.tidy(root.id) });
+    }
+    const node = selectedId ? nodes[selectedId] : undefined;
+    if (node && !editing) {
+      const ctx: MenuContext = {
+        node,
+        canEdit,
+        isRoot: node.parentId === null,
+        hasChildren: (index.get(node.id)?.length ?? 0) > 0,
+        siblingCount: node.parentId ? (index.get(node.parentId)?.length ?? 0) : 0,
+        branchMoved: branchIds(nodes, node.id).some((bid) => nodes[bid]?.dx !== undefined),
+        actions,
+        openPopover: (popover) => setPopoverRequest({ popover, nonce: Date.now() }),
+        close: focusCanvas,
+      };
+      for (const group of mindMenuGroups(ctx)) {
+        for (const item of group.items) {
+          if (item.disabled) continue;
+          out.push({
+            id: `node:${item.id}`,
+            label: item.label,
+            group: 'Tópico selecionado',
+            shortcut: item.shortcut,
+            icon: item.icon,
+            run: item.onSelect,
+          });
+        }
+      }
+    }
+    return out;
+  });
 
   return (
     <div
@@ -863,6 +926,7 @@ export function MindMapCanvas({
             branchMoved={branchIds(nodes, selectedNode.id).some((bid) => nodes[bid]?.dx !== undefined)}
             side={posById.get(selectedNode.id)?.side ?? 'root'}
             actions={actions}
+            popoverRequest={popoverRequest}
           />
         )}
       </AnimatedReactFlow>

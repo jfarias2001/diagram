@@ -1,6 +1,6 @@
 import type { EdgeArrow, EdgeLine, FlowEdgeRecord, Shape } from '@diagram/shared';
 import { NodeToolbar, Position } from '@xyflow/react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { type ActionGroup, ActionMenu } from '../../components/ActionMenu';
 import { ColorPicker } from '../../components/ColorPicker';
 import {
@@ -29,7 +29,7 @@ export interface ShapeStyleActions {
   remove: () => void;
 }
 
-type ShapePopover = 'fill' | 'stroke' | 'ink' | 'menu' | null;
+export type ShapePopover = 'fill' | 'stroke' | 'ink' | 'menu' | null;
 
 /** Grupos do menu da forma. Função pura, testável sem DOM (SPEC-008 §7). */
 export function shapeMenuGroups({
@@ -99,6 +99,7 @@ export function ShapeSelectionBar({
   palette,
   defaults,
   actions,
+  popoverRequest,
 }: {
   shapes: Shape[];
   /** Cores do tema do documento. */
@@ -106,8 +107,16 @@ export function ShapeSelectionBar({
   /** Cores em uso quando a forma não escolheu nenhuma. */
   defaults: { fill: string; stroke: string; ink: string };
   actions: ShapeStyleActions;
+  /** Pedido de fora (paleta de comandos) para abrir um painel da barra. */
+  popoverRequest?: { popover: Exclude<ShapePopover, null>; nonce: number } | null;
 }) {
   const [popover, setPopover] = useState<ShapePopover>(null);
+  // Só vale pedido feito DEPOIS que esta barra apareceu: ela é recriada a cada
+  // troca de seleção e não pode reabrir um painel pedido para outro bloco.
+  const [mountedAt] = useState(() => Date.now());
+  useEffect(() => {
+    if (popoverRequest && popoverRequest.nonce >= mountedAt) setPopover(popoverRequest.popover);
+  }, [popoverRequest, mountedAt]);
   const first = shapes[0];
   if (!first) return null;
   const allBold = shapes.every((s) => s.bold);

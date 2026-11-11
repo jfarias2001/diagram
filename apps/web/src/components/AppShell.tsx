@@ -1,7 +1,8 @@
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useLogout, useMe } from '../features/auth/session';
-import { IconChevronDown, IconKey, IconLogout, IconMenu, IconUsers } from './icons';
+import { useOpenCommandPalette } from './CommandPalette';
+import { IconChevronDown, IconKey, IconLogout, IconMenu, IconSearch, IconUsers } from './icons';
 import { Menu } from './Menu';
 import { Avatar, Logo } from './ui';
 
@@ -22,6 +23,7 @@ export function AppShell() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
   const menuButton = useRef<HTMLButtonElement>(null);
+  const openPalette = useOpenCommandPalette();
   const aside = useRef<HTMLElement>(null);
 
   // Em tela estreita a lateral é uma gaveta: navegar fecha.
@@ -79,6 +81,18 @@ export function AppShell() {
             <span className="font-display text-[15px] font-semibold tracking-tight">Paglamp Diagram</span>
           </Link>
 
+          {/* Descoberta da paleta de comandos (SPEC-009 §5.10). */}
+          <div className="px-3 pb-2">
+            <button
+              type="button"
+              onClick={openPalette}
+              className="flex w-full items-center gap-2 rounded-control border border-nav-active bg-nav-2 px-2.5 py-1.5 text-left text-sm text-nav-muted transition-colors duration-(--dur-micro) hover:border-nav-muted hover:text-nav-ink"
+            >
+              <IconSearch size={15} />
+              <span className="flex-1">Buscar ou ir para…</span>
+              <kbd className="rounded border border-nav-active px-1 font-sans text-2xs">Ctrl K</kbd>
+            </button>
+          </div>
           <div ref={setSlot} className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" />
 
           <div className="border-t border-nav-active p-2">

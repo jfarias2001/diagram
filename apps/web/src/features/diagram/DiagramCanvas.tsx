@@ -38,6 +38,9 @@ import { useRenderAll } from '../export/renderAll';
 import { AnimatedReactFlow } from '../editor/motion/AnimatedFlow';
 import { DUR, motionMs, useReducedMotion } from '../../lib/motion';
 import { MapSearch } from '../editor/MapSearch';
+import { useCommands } from '../../components/CommandPalette';
+import type { Command } from '../../components/commands';
+import { IconFit, IconSearch, IconTidy } from '../../components/icons';
 import { panToReveal } from '../editor/motion/camera';
 import { MAX_HITS, searchDiagram } from '../editor/search';
 import { LOCAL_ORIGIN } from '../editor/useMindMap';
@@ -47,7 +50,7 @@ import { parsePasted, serializeClip } from './clipboard';
 import { DiagramControls } from './DiagramControls';
 import { type DiagramFlowEdge, FlowEdge, type FlowEdgeData } from './FlowEdge';
 import { QuickShapeMenu } from './QuickShapeMenu';
-import { EdgeSelectionBar, ShapeSelectionBar } from './SelectionBar';
+import { EdgeSelectionBar, shapeMenuGroups, type ShapePopover, ShapeSelectionBar, type ShapeStyleActions } from './SelectionBar';
 import { type ShapeFlowNode, ShapeNode, type ShapeNodeData } from './ShapeNode';
 import { ShapePalette } from './ShapePalette';
 import { toast } from '../../components/toastStore';
@@ -90,7 +93,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
     [theme],
   );
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const { screenToFlowPosition, getZoom, getViewport, setViewport } = useReactFlow();
+  const { screenToFlowPosition, getZoom, getViewport, setViewport, fitView } = useReactFlow();
   const [selection, setSelection] = useState<{ shapes: string[]; edges: string[] }>({ shapes: [], edges: [] });
   const [editing, setEditing] = useState<Editing>(null);
   const [draft, setDraft] = useState<Draft>({});
@@ -643,6 +646,79 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
   const selectedShapes = selection.shapes.flatMap((id) => (diagram.shapes[id] ? [diagram.shapes[id] as Shape] : []));
   const selectedEdge = selection.edges.length === 1 ? diagram.edges[selection.edges[0]!] : undefined;
   const showShapeBar = canEdit && selectedShapes.length > 0 && !editing && Object.keys(draft).length === 0;
+  const shapeActions: ShapeStyleActions = {
+    setFill: (fill) => {
+      newStep();
+      updateShapes(doc, selection.shapes, { fill }, LOCAL_ORIGIN);
+    },
+    setStroke: (stroke) => {
+      newStep();
+      updateShapes(doc, selection.shapes, { stroke }, LOCAL_ORIGIN);
+    },
+    setInk: (ink) => {
+      newStep();
+      updateShapes(doc, selection.shapes, { ink }, LOCAL_ORIGIN);
+    },
+    toggleBold: () => {
+      newStep();
+      updateShapes(doc, selection.shapes, { bold: !selectedShapes.every((s) => s.bold) }, LOCAL_ORIGIN);
+    },
+    duplicate: duplicateSelection,
+    remove: removeSelection,
+  };
+
+  // Paleta de comandos (SPEC-009 §5.10): as ações da forma são as MESMAS do
+  // menu em grade; leitor não recebe nenhuma (canEdit), só as do documento.
+  const [shapePopoverRequest, setShapePopoverRequest] = useState<{
+    popover: Exclude<ShapePopover, null>;
+    nonce: number;
+  } | null>(null);
+  useCommands('diagram', () => {
+    const out: Command[] = [
+      {
+        id: 'search',
+        label: 'Buscar no documento',
+        group: 'Documento',
+        shortcut: 'Ctrl+F',
+        icon: IconSearch,
+        run: () => setSearch((v) => v ?? { query: '', index: 0 }),
+      },
+      {
+        id: 'fit',
+        label: 'Ajustar à tela',
+        group: 'Documento',
+        icon: IconFit,
+        keywords: 'zoom enquadrar',
+        run: () => void fitView({ ...FIT_VIEW_OPTIONS, duration: motionMs(DUR.base) }),
+      },
+    ];
+    if (canEdit) {
+      out.push({ id: 'organize', label: 'Organizar o fluxograma', group: 'Documento', icon: IconTidy, run: () => void organize() });
+    }
+    if (canEdit && selectedShapes.length > 0 && !editing) {
+      const groups = shapeMenuGroups({
+        allBold: selectedShapes.every((x) => x.bold),
+        count: selectedShapes.length,
+        actions: shapeActions,
+        openPopover: (popover) => setShapePopoverRequest({ popover, nonce: Date.now() }),
+        close: focusCanvas,
+      });
+      for (const group of groups) {
+        for (const item of group.items) {
+          if (item.disabled) continue;
+          out.push({
+            id: `shape:${item.id}`,
+            label: item.label,
+            group: selectedShapes.length > 1 ? 'Formas selecionadas' : 'Forma selecionada',
+            shortcut: item.shortcut,
+            icon: item.icon,
+            run: item.onSelect,
+          });
+        }
+      }
+    }
+    return out;
+  });
 
   return (
     <div className="flex h-full w-full">
@@ -759,26 +835,8 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
               shapes={selectedShapes}
               palette={theme.branches}
               defaults={defaults}
-              actions={{
-                setFill: (fill) => {
-                  newStep();
-                  updateShapes(doc, selection.shapes, { fill }, LOCAL_ORIGIN);
-                },
-                setStroke: (stroke) => {
-                  newStep();
-                  updateShapes(doc, selection.shapes, { stroke }, LOCAL_ORIGIN);
-                },
-                setInk: (ink) => {
-                  newStep();
-                  updateShapes(doc, selection.shapes, { ink }, LOCAL_ORIGIN);
-                },
-                toggleBold: () => {
-                  newStep();
-                  updateShapes(doc, selection.shapes, { bold: !selectedShapes.every((s) => s.bold) }, LOCAL_ORIGIN);
-                },
-                duplicate: duplicateSelection,
-                remove: removeSelection,
-              }}
+              actions={shapeActions}
+              popoverRequest={shapePopoverRequest}
             />
           )}
           <Guides guides={guides} />

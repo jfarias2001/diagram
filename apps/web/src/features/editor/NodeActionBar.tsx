@@ -1,6 +1,6 @@
 import { type MindMapNode, NODE_SHAPES, type NodeShape, normalizeLink, readableInk } from '@diagram/shared';
 import { NodeToolbar, Position, useStore } from '@xyflow/react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { type ActionGroup, ActionMenu } from '../../components/ActionMenu';
 import { ColorPicker } from '../../components/ColorPicker';
 import {
@@ -78,6 +78,13 @@ interface Props {
   /** Lado do bloco no mapa: a barra abre para fora, longe dos irmãos (SPEC-008 §5.4). */
   side: 'left' | 'right' | 'root';
   actions: NodeActions;
+  /** Pedido de fora (paleta de comandos) para abrir cores, formato ou link. */
+  popoverRequest?: PopoverRequest | null;
+}
+
+export interface PopoverRequest {
+  popover: 'color' | 'link' | 'shape' | 'menu';
+  nonce: number;
 }
 
 type Popover = 'color' | 'link' | 'shape' | 'menu' | null;
@@ -271,8 +278,15 @@ export function NodeActionBar({
   branchMoved,
   side,
   actions,
+  popoverRequest,
 }: Props) {
   const [popover, setPopover] = useState<Popover>(null);
+  // Só vale pedido feito DEPOIS que esta barra apareceu: ela é recriada a cada
+  // troca de seleção e não pode reabrir um painel pedido para outro bloco.
+  const [mountedAt] = useState(() => Date.now());
+  useEffect(() => {
+    if (popoverRequest && popoverRequest.nonce >= mountedAt) setPopover(popoverRequest.popover);
+  }, [popoverRequest, mountedAt]);
   const isRoot = node.parentId === null;
   // Altura do que está aberto: o menu em grade é bem mais alto que um seletor.
   const panelHeight = popover === 'menu' ? 420 : popover ? 330 : 0;

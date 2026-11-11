@@ -277,3 +277,68 @@ test('Ctrl+F: revela o resultado escondido SÓ para quem busca', async ({ browse
   await owner.keyboard.press('Escape');
   await expect(node(owner, 'Orçamento de cursos')).toHaveCount(0);
 });
+
+const palette = (page: Page) => page.getByRole('dialog', { name: 'Paleta de comandos' });
+
+test('Ctrl+K: abre documento pelo nome; a leitora não vê ação de edição', async ({ browser }) => {
+  const admin = await newPage(browser);
+  await loginAdmin(admin);
+
+  const email = `leo-${Date.now()}@gmail.com`;
+  await admin.getByRole('link', { name: 'Usuários' }).click();
+  await admin.getByRole('button', { name: '+ Criar acesso' }).click();
+  await admin.getByLabel('Nome').fill('Leo Leitor');
+  await admin.getByLabel('E-mail').fill(email);
+  await admin.getByRole('button', { name: 'Criar acesso' }).last().click();
+  const code = admin.locator('dialog code');
+  await expect(code).toHaveText(/^[A-Za-z0-9]{16}$/);
+  const temp = (await code.textContent())!.trim();
+  await admin.getByRole('button', { name: 'Pronto' }).click();
+
+  const title = `Paleta ${Date.now()}`;
+  await newMindMap(admin, title);
+  await node(admin, title).click();
+  await addBlock(admin, 'Tab', 'Conteúdo');
+  const docUrl = admin.url();
+  await admin.getByRole('button', { name: 'Compartilhar' }).click();
+  await admin.getByLabel('Convidar pelo e-mail').fill(email);
+  await admin.getByLabel('Papel', { exact: true }).selectOption('VIEWER');
+  await admin.locator('dialog').getByRole('button', { name: 'Adicionar' }).click();
+  await expect(admin.getByText('Leo Leitor')).toBeVisible();
+  await admin.getByRole('button', { name: 'Fechar' }).click();
+
+  // No painel: Ctrl+K, parte do título, Enter → abre o documento.
+  await admin.goto('/');
+  await expect(admin.getByRole('heading', { name: 'Documentos' })).toBeVisible();
+  await admin.keyboard.press('Control+k');
+  await expect(palette(admin)).toBeVisible();
+  await admin.keyboard.type(title.slice(0, 12));
+  await expect(palette(admin).getByRole('option', { name: title })).toBeVisible();
+  await admin.keyboard.press('ArrowDown');
+  // Navega até o documento (ações vêm antes) e abre.
+  await palette(admin).getByRole('option', { name: title }).click();
+  await expect(admin).toHaveURL(docUrl);
+  await expect(node(admin, 'Conteúdo')).toBeVisible();
+
+  // Dono no editor: vê ações do tópico.
+  await node(admin, 'Conteúdo').click();
+  await admin.keyboard.press('Control+k');
+  await expect(palette(admin).getByRole('option', { name: /Novo filho/ })).toBeVisible();
+  await admin.keyboard.press('Escape');
+  await expect(palette(admin)).toBeHidden();
+
+  // Leitora: nenhuma ação de edição, mas exportar e buscar sim.
+  const leo = await newPage(browser);
+  await login(leo, email, temp);
+  await choosePassword(leo, temp, 'senha do leo 123');
+  await leo.goto(docUrl);
+  await node(leo, 'Conteúdo').click();
+  await leo.keyboard.press('Control+k');
+  const p = palette(leo);
+  await expect(p.getByRole('option', { name: /Exportar/ })).toBeVisible();
+  await expect(p.getByRole('option', { name: /Buscar no documento/ })).toBeVisible();
+  for (const name of [/Novo filho/, /Novo irmão/, /Apagar/, /Cores/, /Aparência/, /Organizar/]) {
+    await expect(p.getByRole('option', { name })).toHaveCount(0);
+  }
+  await shot(leo, 'sp009-paleta-leitor');
+});

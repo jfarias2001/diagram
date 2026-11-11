@@ -1,4 +1,5 @@
 import { Navigate, Outlet, useLocation } from 'react-router';
+import { CommandProvider } from '../../components/CommandPalette';
 import { Spinner } from '../../components/ui';
 import { useMe } from './session';
 
@@ -29,5 +30,13 @@ export function RequireAuth({ admin = false }: { admin?: boolean }) {
     return <Navigate to="/trocar-senha" replace />;
   }
   if (admin && me.data.role !== 'ADMIN') return <Navigate to="/" replace />;
-  return <Outlet />;
+  // A guarda de fora (todas as telas logadas) liga a paleta de comandos;
+  // a guarda de admin, aninhada nela, não cria uma segunda (SPEC-009 §5.10).
+  return admin ? (
+    <Outlet />
+  ) : (
+    <CommandProvider>
+      <Outlet />
+    </CommandProvider>
+  );
 }

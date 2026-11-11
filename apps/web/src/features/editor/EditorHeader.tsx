@@ -11,6 +11,7 @@ import { IconExport, IconHistory, IconShare, IconTheme } from '../../components/
 import { ExportDialog } from '../export/ExportDialog';
 import { ShareDialog } from './ShareDialog';
 import type { CollabState, SaveStatus } from './useCollab';
+import { useCommands } from '../../components/CommandPalette';
 
 // Barra superior comum aos dois editores (SPEC-003 §5.1): título, status,
 // presença, exportar e compartilhar.
@@ -37,6 +38,19 @@ export function EditorHeader({
   const me = useMe().data;
   const canEdit = !state.readOnly;
   const [sharing, setSharing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  // Paleta de comandos (SPEC-009 §5.10): as ações do documento.
+  useCommands('document', () => [
+    ...(onToggleHistory
+      ? [{ id: 'history', label: 'Histórico de versões', group: 'Documento', icon: IconHistory, run: onToggleHistory }]
+      : []),
+    ...(canEdit
+      ? [{ id: 'appearance', label: 'Aparência', group: 'Documento', keywords: 'tema fonte fundo cor', icon: IconTheme, run: onToggleAppearance }]
+      : []),
+    { id: 'export', label: 'Exportar', group: 'Documento', keywords: 'pdf png imagem imprimir', icon: IconExport, run: () => setExporting(true) },
+    { id: 'share', label: 'Compartilhar', group: 'Documento', keywords: 'acesso membro convidar', icon: IconShare, run: () => setSharing(true) },
+  ]);
 
   useEffect(() => {
     if (me) provider.setAwarenessField('user', { id: me.id, name: me.name, color: colorFor(me.id) });
@@ -66,7 +80,7 @@ export function EditorHeader({
             <IconTheme />
             Aparência
           </Button>
-          <ExportButton title={meta.title} />
+          <ExportButton title={meta.title} open={exporting} onOpenChange={setExporting} />
           <Button variant="primary" onClick={() => setSharing(true)}>
             <IconShare />
             Compartilhar
@@ -184,9 +198,8 @@ function Presence({ provider }: { provider: HocuspocusProvider }) {
 }
 
 /** Abre o diálogo de exportação: PNG ou PDF, com tamanho e orientação (SPEC-008 §5.6). */
-function ExportButton({ title }: { title: string }) {
+function ExportButton({ title, open, onOpenChange: setOpen }: { title: string; open: boolean; onOpenChange: (open: boolean) => void }) {
   const { getNodes } = useReactFlow();
-  const [open, setOpen] = useState(false);
   return (
     <>
       <Button onClick={() => setOpen(true)}>
