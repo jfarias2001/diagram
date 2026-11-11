@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Aprovado (2026-11-11) |
+| Status | Implementado (2026-11-11) |
 | Autor | João Paulo (via Claude) |
 | Data | 2026-11-11 |
 | SPEC | [SPEC-009](../spec/SPEC-009-movimento-e-acabamento.md) |

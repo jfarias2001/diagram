@@ -25,10 +25,105 @@
 
 ## Estado atual (atualize a cada entrada)
 
-- **Fase:** SPEC-001 a 008 **todas implementadas e testadas** (415+ testes + 14 E2E); ainda não publicadas na VPS. PESQUISA-001 feita; **PRD-009 aprovado**; SPEC-009 em rascunho.
+- **Fase:** SPEC-001 a 009 **todas implementadas e testadas** (491 testes de unidade/integração + 26 E2E); ainda não publicadas na VPS.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** aprovação da **SPEC-009 (movimento e acabamento)** e implementação em 16 blocos com commit próprio; em paralelo, primeiro deploy na VPS e PRD de backup do banco.
+- **Próximo passo:** escolher a próxima onda do roteiro da [PESQUISA-001](docs/research/PESQUISA-001-ux-e-concorrentes.md) §5 (sugestão: PRD-010, conteúdo rico no bloco); em paralelo, primeiro deploy na VPS e PRD de backup do banco.
+
+---
+
+## 2026-11-11 — Movimento e acabamento: um sistema afiado e fluido (SPEC-009)
+**Tipo:** feature, fix
+**Refs:** PRD-009, SPEC-009, PESQUISA-001
+
+**O que mudou**
+
+*Base*
+- **Base de movimento:** tokens `--dur-*` e `--ease-*`, mais escalas de raio, sombra e texto (`text-2xs` substitui `text-[10px]/[11px]`, com teste que varre o código).
+- **"Reduzir movimento":** uma regra global zera transições e animações, e as durações em JS passam por `motionMs`.
+- **Testes E2E:** rodam com "reduzir movimento" por padrão; quem testa animação liga o movimento no próprio arquivo.
+
+*Interface*
+- **Entrada e saída** (`usePresence`): diálogos, menus, paleta, gaveta e histórico entram e saem suavemente.
+- **`Modal`:** guarda o conteúdo enquanto sai e é rotulado pelo título.
+- **Um menu só** (`Menu`): substitui os 4 feitos à mão (cartão, "+ Criar", conta e o diálogo de opções da pasta, que virou menu). Navega com setas, `Home`/`End` e letra inicial; `Esc` devolve o foco; fecha com toque e com `Tab`.
+- **Avisos com Desfazer** (`toastStore` + `Toaster`) em:
+  - lixeira (volta à mesma pasta);
+  - mover, inclusive trocando de pasta pessoal para compartilhada (`undoMoveSteps`, testado);
+  - remover membro, de documento e de pasta.
+- **Erro de ação vira aviso** (`MutationCache`); os formulários mantêm o erro no campo (`INLINE_ERROR`).
+- **Confirmação do próprio sistema:** os 5 `window.confirm` e o `window.alert` saíram, trocados pelo `ConfirmDialog` com foco em Cancelar; a regra `no-alert` do ESLint impede que voltem.
+- **Esqueletos que não piscam:** aparecem após 200 ms e ficam pelo menos 400 ms. Valem no painel, usuários, histórico, membros e abertura do editor.
+- **Acabamento:**
+  - `Button` com `size` e retorno ao pressionar; campos com anel de foco e `aria-invalid`; `Field` com `aria-describedby`;
+  - pastas abrem deslizando, com a seta girando;
+  - transições de tela (View Transitions) e cartões entrando escalonados;
+  - histórico desliza da direita.
+- **Celular:** o ponto de "Salvo/Offline" fica visível (tocar mostra o texto); a gaveta fecha com `Esc` e deixa o resto da página inerte; o botão de menu não cobre mais o título; o "⋯" da pasta aparece no toque.
+
+*Editor*
+- **O mapa flui:** os blocos deslizam até o lugar novo, o bloco novo sai do pai e o ramo recolhido volta para ele (fantasmas).
+  - `planTransition` é pura e tem 11 testes.
+  - `AnimatedReactFlow` interpola só os nós que mudaram, num componente próprio; as ligações acompanham.
+  - Nada anima no arrasto, no modo versão, com "reduzir movimento" ou quando mais de 300 blocos mudam de uma vez.
+  - A exportação espera o quadro parar de se mexer.
+- **Fluxograma:** "Organizar" e movimentos grandes de colegas deslizam; setas e o fim do arrasto ficam instantâneos.
+- **A câmera acompanha** o bloco criado ou navegado pelas setas, sem mudar o zoom (`panToReveal`, testado).
+- **Ramo recolhido:**
+  - o selo mostra quantos tópicos esconde e abre o ramo ao clicar — o "+" não ocupa mais o lugar dele;
+  - há um botão de recolher no hover;
+  - `Tab` num bloco recolhido abre o ramo na mesma transação.
+- **Apagar ramo grande:** com 20 tópicos ou mais, guarda uma versão antes. O aviso "N tópicos apagados · Desfazer" nunca desfaz outra ação (`canUndoFromToast`, testado).
+- **`Ctrl+F` busca no documento** (mapa e fluxograma), sem acento e sem caixa, com "2 de 3" e câmera até o resultado.
+  - O resultado dentro de um ramo recolhido é revelado **só no desenho de quem busca**.
+  - Testado com duas sessões: o ramo continua recolhido para a colega.
+- **`Ctrl+K` abre a paleta de comandos** em qualquer tela logada.
+  - Ações do tópico ou forma (as mesmas do menu em grade, já filtradas por papel), ações do documento, "ir para" e documentos (pela busca existente).
+  - `rankCommands` é testada.
+  - Botão "Buscar ou ir para…" na lateral.
+- **Lista de atalhos** num diálogo: `Ctrl+/` sempre e `?` sem seleção (com bloco selecionado, digitar "?" continua editando — §10 da SPEC, aprovado).
+- **Desempenho:**
+  - presença por bloco (`presence.ts`): um colega trocar de seleção re-renderiza 2 nós, não o mapa;
+  - o mapa mental passa a desenhar só o que está na tela;
+  - a exportação liga "desenhar tudo" durante a foto (`renderAll`).
+- **Contorno do colega** convive com a minha seleção.
+
+*Bugs que existiam antes e foram achados no caminho*
+- **Letras perdidas ao criar um bloco e digitar rápido.** Eram três causas:
+  - o texto guardado era sobrescrito pela tecla seguinte;
+  - o Enter lia o estado atrasado e gravava vazio;
+  - o bloco novo ficava invisível até ser medido e não recebia foco — agora nasce com o tamanho estimado.
+- **`Enter` logo depois de confirmar um texto se perdia:** o foco só voltava ao quadro no frame seguinte. Agora volta na hora quando a confirmação vem do teclado.
+- **Exportar com zoom aproximado deixava de fora o que estava fora da tela.** O fluxograma já desenhava só o visível e a exportação fotografa o DOM. O E2E novo prova a correção no mapa e falha sem ela.
+
+*Desvios da SPEC (pequenos, registrados aqui)*
+- **Gaveta do celular:** não virou `<dialog>`, porque o conteúdo da lateral é desenhado nela por portal. O mesmo efeito (foco dentro, `Esc`, resto inerte) foi feito com `inert`.
+- **Separação lateral × quadro no escuro:** contraste de 1,15 entre duas cores quase pretas é impossível. Virou uma borda (`--nav-edge`), testada.
+- **Status no celular:** tocar mostra o texto ao lado por 3 s, em vez de um menu.
+- **Botão de fechar do aviso:** chama-se "Dispensar aviso", para não confundir com o "Fechar" dos diálogos.
+
+*Testes:* 491 de unidade e integração (mais 76) e **26 E2E** (mais 12). Os E2E da câmera, do Espaço e da exportação foram conferidos falhando sem a correção.
+
+**Revisão de segurança**
+- Checklist CLAUDE.md §9 revisada no que mudou:
+  - **Autorização:** nenhuma rota nova e nada mudou em `apps/api/src` nem em `packages/shared/src`.
+    - O Desfazer chama rotas existentes com as mesmas checagens; integração nova prova que um EDITOR não devolve acesso nem restaura da lixeira.
+    - A paleta e os menus só **escondem** o que o papel não permite; quem decide é o servidor.
+    - Expandir pelo selo usa o `updateNode` de sempre (escrita de leitor é descartada no servidor; para leitor, o selo nem é botão).
+  - **Vazamento entre usuários:** a revelação da busca é local (não toca o Y.Doc — E2E com duas sessões); a paleta busca documentos pela rota já filtrada por acesso; nada novo no awareness.
+  - **XSS:** avisos, paleta, confirmação e busca renderizam títulos como texto; nenhum `dangerouslySetInnerHTML`; o destaque da busca é por `className`.
+  - **CSS:** valores em `style` são constantes ou números (`--origin` de lista fechada, `animationDelay`, opacidade). CSP inalterada: View Transitions e WAAPI não usam `eval`.
+  - **DoS no navegador:** tetos de 300 nós animados, 500 destaques de busca e 3 avisos; debounce na busca e na paleta.
+  - **Ações destrutivas:** confirmação com foco em Cancelar, Desfazer roda uma vez só, `no-alert` no lint.
+  - **Segredos:** nada de `.env`, dump ou chave (`git status` conferido em cada commit).
+- `pnpm audit --prod`: **sem vulnerabilidades**. Nenhuma dependência nova.
+
+**Pendências / próximos passos**
+- [ ] Sombra-fantasma de encaixe durante o arrasto (estilo MindNode) e recolher por pessoa (PRD-009 §8 e §9.1, vão para o PRD-012).
+- [ ] O modo versão ainda mostra o círculo girando ao carregar a prévia (fora das 5 telas da SPEC).
+- [ ] "+ Criar acesso" (Usuários) ainda usa o caractere "+"; as cores de avatar seguem como constantes decorativas.
+- [ ] Próxima onda do roteiro (PESQUISA-001 §5): PRD-010 conteúdo rico no bloco (ícones, imagens, tarefas, ligações cruzadas).
+- [ ] Primeiro deploy na VPS e PRD de backup do banco.
 
 ---
 
