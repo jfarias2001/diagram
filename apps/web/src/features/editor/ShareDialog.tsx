@@ -2,11 +2,12 @@ import type { DocumentMemberView, Role } from '@diagram/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Avatar, Button, ErrorText, Input, Modal, Select, Spinner } from '../../components/ui';
+import { Avatar, Button, ErrorText, Input, Modal, Select } from '../../components/ui';
 import { api } from '../../lib/api';
 import { INLINE_ERROR } from '../../lib/mutations';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { toast } from '../../components/toastStore';
+import { Deferred, RowsSkeleton } from '../../components/Skeleton';
 
 const ROLE_LABEL: Record<Role, string> = {
   OWNER: 'Dono',
@@ -128,7 +129,9 @@ export function ShareDialog({
       <div className="flex flex-col gap-1">
         <p className="text-sm font-medium">Quem tem acesso</p>
         {members.isPending ? (
-          <Spinner className="my-4 self-center text-muted" />
+          <Deferred loading skeleton={<RowsSkeleton rows={3} avatar />}>
+            {() => null}
+          </Deferred>
         ) : (
           <ul className="flex max-h-72 flex-col overflow-y-auto">
             {members.data?.items.map((m) => (

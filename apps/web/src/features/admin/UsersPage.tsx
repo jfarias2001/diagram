@@ -1,11 +1,12 @@
 import type { AdminUser, UserRole } from '@diagram/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
-import { Button, ErrorText, Field, Input, Modal, relativeTime, Select, Spinner } from '../../components/ui';
+import { Button, ErrorText, Field, Input, Modal, relativeTime, Select } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useMe } from '../auth/session';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { INLINE_ERROR } from '../../lib/mutations';
+import { Deferred, TableSkeleton } from '../../components/Skeleton';
 
 const usersKey = ['admin-users'] as const;
 
@@ -51,9 +52,9 @@ export function UsersPage() {
       <ErrorText error={users.error} />
 
       {users.isPending ? (
-        <div className="flex justify-center py-16 text-muted">
-          <Spinner />
-        </div>
+        <Deferred loading skeleton={<TableSkeleton />}>
+          {() => null}
+        </Deferred>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-line bg-surface">
           <table className="w-full min-w-[720px] text-sm">

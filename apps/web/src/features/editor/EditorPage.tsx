@@ -19,6 +19,7 @@ import { NotePanel } from './NotePanel';
 import { ShortcutHint } from './ShortcutHint';
 import { type CollabState, useCollab } from './useCollab';
 import { useMindMapNodes, useUndoManager } from './useMindMap';
+import { EditorSkeleton } from '../../components/Skeleton';
 
 // O editor de fluxograma é um chunk à parte (SPEC-003 §5.1).
 const DiagramEditor = lazy(() => import('../diagram/DiagramEditor'));
@@ -38,10 +39,9 @@ export default function EditorPage() {
   if (state.failed === 'password-change-required') return <Navigate to="/trocar-senha" replace />;
 
   const loading = (
-    <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted">
-      <Spinner />
-      {state.status === 'offline' ? 'Sem conexão com o servidor. Tentando de novo…' : 'Abrindo documento…'}
-    </div>
+    <EditorSkeleton
+      message={state.status === 'offline' ? 'Sem conexão com o servidor. Tentando de novo…' : 'Abrindo documento…'}
+    />
   );
   if (!meta.data || !session || !state.synced) return loading;
 

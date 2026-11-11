@@ -1,13 +1,14 @@
 import type { FolderKind, FolderMemberView, FolderNode, FolderRole } from '@diagram/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useState } from 'react';
-import { Button, ErrorText, Field, Input, Modal, Select, Spinner } from '../../components/ui';
+import { Button, ErrorText, Field, Input, Modal, Select } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { IconEdit, IconTrash, IconUsers } from '../../components/icons';
 import type { MenuItem } from '../../components/Menu';
 import { errorMessage, toast } from '../../components/toastStore';
 import { INLINE_ERROR } from '../../lib/mutations';
+import { Deferred, RowsSkeleton } from '../../components/Skeleton';
 
 // Diálogos das pastas (SPEC-004 §5.2).
 
@@ -245,9 +246,9 @@ export function FolderMembersDialog({ folder, onClose }: { folder: FolderNode | 
         <ErrorText error={add.error ?? members.error} />
 
         {members.isPending ? (
-          <div className="flex justify-center py-6 text-muted">
-            <Spinner />
-          </div>
+          <Deferred loading skeleton={<RowsSkeleton rows={3} avatar />}>
+            {() => null}
+          </Deferred>
         ) : (
           <ul className="flex flex-col divide-y divide-line">
             {members.data?.items.length === 0 && (

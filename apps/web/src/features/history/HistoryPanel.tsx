@@ -1,11 +1,12 @@
 import type { VersionList, VersionSummary } from '@diagram/shared';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Button, ErrorText, Input, relativeTime, Spinner } from '../../components/ui';
+import { Button, ErrorText, Input, relativeTime } from '../../components/ui';
 import { api } from '../../lib/api';
 import { IconClose } from '../../components/icons';
 import { INLINE_ERROR } from '../../lib/mutations';
 import { toast } from '../../components/toastStore';
+import { Deferred, RowsSkeleton } from '../../components/Skeleton';
 
 // Painel de histórico do documento (SPEC-005 §5.1). Todos os papéis veem;
 // só Editor e Dono criam e restauram.
@@ -121,9 +122,9 @@ export function HistoryPanel({
       <ErrorText error={list.error} />
 
       {list.isPending ? (
-        <div className="flex justify-center py-10 text-muted">
-          <Spinner />
-        </div>
+        <Deferred loading skeleton={<div className="p-4"><RowsSkeleton rows={6} /></div>}>
+          {() => null}
+        </Deferred>
       ) : items.length === 0 ? (
         <p className="p-4 text-sm text-muted">
           Ainda não há versões guardadas deste documento. Elas aparecem sozinhas enquanto o documento é editado.

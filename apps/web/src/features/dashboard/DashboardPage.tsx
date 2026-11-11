@@ -24,7 +24,7 @@ import {
   IconShared,
   IconTrashDoc,
 } from '../../components/icons';
-import { Button, ErrorText, Field, Input, Modal, relativeTime, Spinner } from '../../components/ui';
+import { Button, ErrorText, Field, Input, Modal, relativeTime } from '../../components/ui';
 import { api } from '../../lib/api';
 import { INLINE_ERROR } from '../../lib/mutations';
 import {
@@ -38,6 +38,7 @@ import { useConfirm } from '../../components/ConfirmDialog';
 import { Menu } from '../../components/Menu';
 import { toast } from '../../components/toastStore';
 import { type MoveStep, undoMoveSteps } from './undoMove';
+import { CardsSkeleton, Deferred } from '../../components/Skeleton';
 
 type DocAction = 'trash' | 'restore' | 'delete' | 'duplicate';
 
@@ -328,11 +329,9 @@ export function DashboardPage() {
 
       <ErrorText error={list.error} />
 
-      {list.isPending ? (
-        <div className="flex justify-center py-16 text-muted">
-          <Spinner />
-        </div>
-      ) : items.length === 0 ? (
+      <Deferred loading={list.isPending} skeleton={<CardsSkeleton view={view} />}>
+        {() =>
+          items.length === 0 ? (
         <EmptyState scope={scope} searching={!!q || !!typeFilter.value} onCreate={() => setCreating('MINDMAP')} />
       ) : (
         <ul
@@ -356,7 +355,9 @@ export function DashboardPage() {
             />
           ))}
         </ul>
-      )}
+          )
+        }
+      </Deferred>
 
       {list.hasNextPage && (
         <div className="flex justify-center">
