@@ -36,9 +36,10 @@ import { type MindFlowNode, MindNode, type MindNodeData, PENDING_ENTER } from '.
 import { type NodeActions, NodeActionBar } from './NodeActionBar';
 import { stableData } from './stableData';
 import { edgeWidthForDepth } from './taper';
+import { useRenderAll } from '../export/renderAll';
+import { PresenceContext, usePresenceStore } from './presence';
 import { LOCAL_ORIGIN } from './useMindMap';
 
-const NO_PEERS: Array<{ name: string; color: string }> = [];
 const nodeTypes = { mind: MindNode };
 const edgeTypes = { mind: MindEdge };
 
@@ -57,34 +58,6 @@ interface Props {
   onCheckpoint?: (name: string) => void;
   /** Tema do documento (SPEC-007 §5.4). */
   board: BoardTheme;
-}
-
-type PeerSelection = Map<string, Array<{ name: string; color: string }>>;
-
-/** Seleções dos colegas, pelo awareness do Yjs. */
-function usePeerSelections(provider: HocuspocusProvider | null): PeerSelection {
-  const [peers, setPeers] = useState<PeerSelection>(new Map());
-  useEffect(() => {
-    const awareness = provider?.awareness;
-    if (!awareness) return;
-    const update = () => {
-      const next: PeerSelection = new Map();
-      awareness.getStates().forEach((state, clientId) => {
-        if (clientId === awareness.clientID) return;
-        const selected = state.selected;
-        const user = state.user as { name?: string; color?: string } | undefined;
-        if (typeof selected !== 'string' || !user?.name) return;
-        const list = next.get(selected) ?? [];
-        list.push({ name: user.name, color: user.color ?? '#5c7cfa' });
-        next.set(selected, list);
-      });
-      setPeers(next);
-    };
-    awareness.on('change', update);
-    update();
-    return () => awareness.off('change', update);
-  }, [provider]);
-  return peers;
 }
 
 export function MindMapCanvas({
@@ -118,7 +91,9 @@ export function MindMapCanvas({
     return text;
   }, []);
   const { getIntersectingNodes } = useReactFlow();
-  const peers = usePeerSelections(provider);
+  // Seleções dos colegas por bloco, fora do memo do mapa (SPEC-009 §5.7).
+  const presence = usePresenceStore(provider);
+  const renderAll = useRenderAll();
 
   // Seleção publicada para os colegas.
   useEffect(() => {
@@ -266,7 +241,6 @@ export function MindMapCanvas({
           hasHiddenChildren: !!node.collapsed && (index.get(node.id)?.length ?? 0) > 0,
           editing: editing?.id === node.id,
           draft: editing?.id === node.id ? editing.draft : null,
-          peers: peers.get(node.id) ?? NO_PEERS,
           canEdit,
           hasNote: !!node.note,
           link: node.link ?? null,
@@ -329,7 +303,6 @@ export function MindMapCanvas({
     canEdit,
     editing,
     index,
-    peers,
     commitText,
     takePending,
     onAddChild,
@@ -625,6 +598,7 @@ export function MindMapCanvas({
       className={`h-full w-full outline-none ${rewire ? 'cursor-crosshair' : ''}`}
       aria-label="Mapa mental. Use as setas para navegar."
     >
+      <PresenceContext.Provider value={presence}>
       <ReactFlow
         nodes={flow.flowNodes}
         edges={flow.flowEdges}
@@ -675,6 +649,8 @@ export function MindMapCanvas({
           onSelect(null);
           focusCanvas();
         }}
+        // Só o que está na tela é desenhado (SPEC-009 §5.8) — exceto na exportação.
+        onlyRenderVisibleElements={!renderAll}
         fitView
         fitViewOptions={FIT_VIEW_OPTIONS}
         minZoom={0.15}
@@ -728,6 +704,7 @@ export function MindMapCanvas({
           />
         )}
       </ReactFlow>
+      </PresenceContext.Provider>
     </div>
   );
 }

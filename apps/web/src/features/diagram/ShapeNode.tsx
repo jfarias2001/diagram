@@ -2,6 +2,7 @@ import { SHAPE_TEXT_MAX, type ShapeKind } from '@diagram/shared';
 import { Handle, type Node, type NodeProps, NodeResizer, Position, useConnection } from '@xyflow/react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { DEFAULT_FILL, DEFAULT_STROKE, ShapeSvg, TEXT_INSET } from './shapes';
+import { usePeersFor } from '../editor/presence';
 
 export type ShapeNodeData = {
   kind: ShapeKind;
@@ -15,7 +16,6 @@ export type ShapeNodeData = {
   /** Texto inicial quando a edição começou digitando. */
   draft: string | null;
   canEdit: boolean;
-  peers: Array<{ name: string; color: string }>;
   onCommit: (id: string, text: string | null) => void;
 };
 
@@ -34,7 +34,8 @@ function ShapeNodeComponent({ id, data, selected }: NodeProps<ShapeFlowNode>) {
   const connection = useConnection();
   const isTarget = connection.inProgress && connection.fromNode?.id !== id;
   const inset = TEXT_INSET[data.kind];
-  const peer = data.peers[0];
+  const peers = usePeersFor(id);
+  const peer = peers[0];
   const isText = data.kind === 'text';
   const isTerminator = data.kind === 'terminator';
 
@@ -85,14 +86,19 @@ function ShapeNodeComponent({ id, data, selected }: NodeProps<ShapeFlowNode>) {
       {selected && (
         <div className="pointer-events-none absolute -inset-1 rounded-md ring-2 ring-brand" aria-hidden />
       )}
-      {peer && !selected && (
+      {/* O anel é meu; o tracejado de fora é do colega — convivem (SPEC-009 §5.7). */}
+      {peer && (
         <>
-          <div className="pointer-events-none absolute -inset-1 rounded-md" style={{ outline: `2px dashed ${peer.color}` }} aria-hidden />
+          <div
+            className={`pointer-events-none absolute rounded-md ${selected ? '-inset-2.5' : '-inset-1'}`}
+            style={{ outline: `2px dashed ${peer.color}` }}
+            aria-hidden
+          />
           <span
             className="pointer-events-none absolute -top-5 left-0 rounded px-1.5 py-px text-2xs font-medium whitespace-nowrap text-white"
             style={{ background: peer.color }}
           >
-            {data.peers.map((p) => p.name.split(' ')[0]).join(', ')}
+            {peers.map((p) => p.name.split(' ')[0]).join(', ')}
           </span>
         </>
       )}

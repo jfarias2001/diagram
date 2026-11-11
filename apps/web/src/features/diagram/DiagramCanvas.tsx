@@ -34,6 +34,8 @@ import type * as Y from 'yjs';
 import { type BoardTheme, mix } from '../editor/boardTheme';
 import { FIT_VIEW_OPTIONS } from '../editor/CanvasControls';
 import { stableData } from '../editor/stableData';
+import { PresenceContext, usePresenceStore } from '../editor/presence';
+import { useRenderAll } from '../export/renderAll';
 import { LOCAL_ORIGIN } from '../editor/useMindMap';
 import { alignmentSnap, boundingBox, type Guide } from './alignment';
 import { autoLayout, GRID } from './autoLayout';
@@ -49,7 +51,6 @@ import { toast } from '../../components/toastStore';
 
 const nodeTypes = { shape: ShapeNode };
 const edgeTypes = { flow: FlowEdge };
-const NO_PEERS: Array<{ name: string; color: string }> = [];
 const SNAP_THRESHOLD_PX = 6;
 const PASTE_OFFSET = 24;
 const ARROW_SIZE = { width: 18, height: 18 };
@@ -122,7 +123,8 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
     provider?.setAwarenessField('selected', selection.shapes[0] ?? null);
   }, [provider, selection.shapes]);
 
-  const peers = usePeerSelections(provider);
+  const presence = usePresenceStore(provider);
+  const renderAll = useRenderAll();
 
   // Seleção some junto com o que foi apagado (por mim ou por um colega).
   useEffect(() => {
@@ -333,13 +335,12 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
           editing: editing?.kind === 'shape' && editing.id === shape.id,
           draft: editing?.kind === 'shape' && editing.id === shape.id ? editing.draft : null,
           canEdit,
-          peers: peers.get(shape.id) ?? NO_PEERS,
           onCommit: commitShapeText,
         }),
       });
     }
     return list;
-  }, [diagram.shapes, draft, selection.shapes, canEdit, editing, peers, commitShapeText, defaults]);
+  }, [diagram.shapes, draft, selection.shapes, canEdit, editing, commitShapeText, defaults]);
 
   const edges = useMemo(() => {
     const selected = new Set(selection.edges);
@@ -597,6 +598,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
         className="relative h-full flex-1 outline-none"
         aria-label="Fluxograma. Use Tab para a paleta de formas."
       >
+        <PresenceContext.Provider value={presence}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -616,7 +618,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
           zoomOnDoubleClick={false}
           snapToGrid={snapping}
           snapGrid={[GRID, GRID]}
-          onlyRenderVisibleElements
+          onlyRenderVisibleElements={!renderAll}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeDrag={onNodeDrag}
@@ -701,6 +703,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
           )}
           <Guides guides={guides} />
         </ReactFlow>
+        </PresenceContext.Provider>
 
         {canEdit && selectedEdge && !editing && (
           <EdgeSelectionBar
@@ -766,31 +769,4 @@ function Guides({ guides }: { guides: Guide[] }) {
 
 function opposite(handle: HandleSide): HandleSide {
   return handle === 'top' ? 'bottom' : handle === 'bottom' ? 'top' : handle === 'left' ? 'right' : 'left';
-}
-
-type PeerSelection = Map<string, Array<{ name: string; color: string }>>;
-
-function usePeerSelections(provider: HocuspocusProvider | null): PeerSelection {
-  const [peers, setPeers] = useState<PeerSelection>(new Map());
-  useEffect(() => {
-    const awareness = provider?.awareness;
-    if (!awareness) return;
-    const update = () => {
-      const next: PeerSelection = new Map();
-      awareness.getStates().forEach((state, clientId) => {
-        if (clientId === awareness.clientID) return;
-        const selected = state.selected;
-        const user = state.user as { name?: string; color?: string } | undefined;
-        if (typeof selected !== 'string' || !user?.name) return;
-        const list = next.get(selected) ?? [];
-        list.push({ name: user.name, color: user.color ?? '#5c7cfa' });
-        next.set(selected, list);
-      });
-      setPeers(next);
-    };
-    awareness.on('change', update);
-    update();
-    return () => awareness.off('change', update);
-  }, [provider]);
-  return peers;
 }

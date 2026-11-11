@@ -3,6 +3,7 @@ import { Handle, type Node, type NodeProps, Position } from '@xyflow/react';
 import { memo, useEffect, useRef, useState } from 'react';
 import { IconLink, IconNote, IconPlus } from '../../components/icons';
 import { SHAPE_PADDING, type Side } from './layout';
+import { usePeersFor } from './presence';
 
 export type MindNodeData = {
   text: string;
@@ -25,8 +26,6 @@ export type MindNodeData = {
   editing: boolean;
   /** Texto inicial ao começar a editar digitando (substitui o conteúdo). */
   draft: string | null;
-  /** Colegas com este nó selecionado. */
-  peers: Array<{ name: string; color: string }>;
   canEdit: boolean;
   hasNote: boolean;
   /** Já validado por readNode (só http/https/mailto). */
@@ -115,7 +114,8 @@ function ShapeBackground({ shape, fill, stroke, lit }: { shape: NodeShape; fill:
 
 function MindNodeComponent({ id, data, selected }: NodeProps<MindFlowNode>) {
   const isRoot = data.side === 'root';
-  const peer = data.peers[0];
+  const peers = usePeersFor(id);
+  const peer = peers[0];
   const canAdd = data.canEdit && !data.editing;
   const shape = data.shape;
   const drawn = SVG_SHAPES.has(shape);
@@ -145,7 +145,8 @@ function MindNodeComponent({ id, data, selected }: NodeProps<MindFlowNode>) {
         // Cor validada na leitura do Y.Doc: só #rrggbb chega aqui (SPEC-006 §6).
         ...(data.fill && !drawn ? { background: data.fill } : {}),
         ...(data.ink ? { color: data.ink } : {}),
-        ...(peer && !selected ? { outline: `2px dashed ${peer.color}`, outlineOffset: 3 } : {}),
+        // O anel é meu; o tracejado de fora é do colega — os dois convivem (SPEC-009 §5.7).
+        ...(peer ? { outline: `2px dashed ${peer.color}`, outlineOffset: selected ? 7 : 3 } : {}),
       }}
     >
       {drawn && (
@@ -207,7 +208,7 @@ function MindNodeComponent({ id, data, selected }: NodeProps<MindFlowNode>) {
           className="pointer-events-none absolute -top-5 left-2 rounded px-1.5 py-px text-2xs font-medium whitespace-nowrap text-white"
           style={{ background: peer.color }}
         >
-          {data.peers.map((p) => p.name.split(' ')[0]).join(', ')}
+          {peers.map((p) => p.name.split(' ')[0]).join(', ')}
         </span>
       )}
 

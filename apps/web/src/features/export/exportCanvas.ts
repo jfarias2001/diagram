@@ -1,5 +1,6 @@
 import { getNodesBounds, getViewportForBounds, type Node } from '@xyflow/react';
 import { toPng } from 'html-to-image';
+import { requestRenderAll } from './renderAll';
 import {
   type ExportFormat,
   fitScale,
@@ -104,6 +105,16 @@ export async function exportCanvas(
   options: ExportOptions = DEFAULT_EXPORT,
 ): Promise<ExportResult> {
   if (nodes.length === 0) return { reduced: false };
+  // O quadro desenha tudo — não só o que está à vista — durante a foto (SPEC-009 §5.8).
+  const release = await requestRenderAll();
+  try {
+    return await exportRendered(nodes, title, options);
+  } finally {
+    release();
+  }
+}
+
+async function exportRendered(nodes: Node[], title: string, options: ExportOptions): Promise<ExportResult> {
   const bounds = getNodesBounds(nodes);
   const boundsPx = { width: bounds.width + PADDING * 2, height: bounds.height + PADDING * 2 };
   const background = options.background ? boardBackground() : undefined;
