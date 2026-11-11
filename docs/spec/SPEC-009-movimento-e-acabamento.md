@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Rascunho |
+| Status | Aprovado (2026-11-11) |
 | PRD | [PRD-009](../prd/PRD-009-movimento-e-acabamento.md) |
 | Data | 2026-11-11 |
 | Origem | [PESQUISA-001](../research/PESQUISA-001-ux-e-concorrentes.md) |

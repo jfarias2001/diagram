@@ -60,6 +60,9 @@ describe.each(['light', 'dark'] as const)('paleta da interface — modo %s', (mo
       'on-brand',
       'danger',
       'on-danger',
+      'nav-hover',
+      'nav-active',
+      'nav-edge',
       'ok',
       'warn',
     ]) {
@@ -81,11 +84,41 @@ describe.each(['light', 'dark'] as const)('paleta da interface — modo %s', (mo
     expect(contrastRatio(t['on-danger'] as string, t.danger as string)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('a lateral se separa do quadro (no escuro, pela borda) — SPEC-009 §5.1', () => {
+    expect(contrastRatio(t['nav-edge'] as string, t.canvas as string)).toBeGreaterThanOrEqual(1.2);
+  });
+
+  it('os estados da lateral se distinguem da própria lateral', () => {
+    expect(contrastRatio(t['nav-active'] as string, t.nav as string)).toBeGreaterThanOrEqual(1.2);
+  });
+
   it('bordas se distinguem do fundo', () => {
     expect(contrastRatio(t.line as string, t.surface as string)).toBeGreaterThanOrEqual(1.2);
   });
 
   it('o âmbar da interface antiga não existe mais', () => {
     expect(css).not.toContain('--filament');
+  });
+});
+
+describe('movimento (SPEC-009 §5.1)', () => {
+  const light = (css.match(/:root\s*\{([^}]*)\}/) ?? [])[1] ?? '';
+
+  it('define o ritmo único de durações', () => {
+    for (const [name, ms] of [
+      ['micro', 120],
+      ['fast', 180],
+      ['base', 240],
+      ['slow', 320],
+    ] as const) {
+      expect(light).toContain(`--dur-${name}: ${ms}ms;`);
+    }
+  });
+
+  it('tem a regra global de "reduzir movimento", que zera animação e transição', () => {
+    const block = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(block).toContain('animation-duration: 1ms !important');
+    expect(block).toContain('transition-duration: 1ms !important');
+    expect(block).toContain('::view-transition-old(*)');
   });
 });

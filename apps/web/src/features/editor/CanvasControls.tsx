@@ -2,6 +2,7 @@ import { Panel, useReactFlow } from '@xyflow/react';
 import { type ReactNode, useEffect, useState } from 'react';
 import type * as Y from 'yjs';
 import { IconFit, IconRedo, IconTidy, IconUndo, IconZoomIn, IconZoomOut } from '../../components/icons';
+import { DUR, motionMs } from '../../lib/motion';
 
 // Controles do canto inferior esquerdo (SPEC-002 §5.7). Substituem o <Controls>.
 
@@ -68,13 +69,13 @@ export function CanvasControls({
             <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />
           </>
         )}
-        <ControlButton label="Afastar" onClick={act(() => zoomOut({ duration: 150 }))}>
+        <ControlButton label="Afastar" onClick={act(() => zoomOut({ duration: motionMs(DUR.micro) }))}>
           <IconZoomOut />
         </ControlButton>
-        <ControlButton label="Aproximar" onClick={act(() => zoomIn({ duration: 150 }))}>
+        <ControlButton label="Aproximar" onClick={act(() => zoomIn({ duration: motionMs(DUR.micro) }))}>
           <IconZoomIn />
         </ControlButton>
-        <ControlButton label="Ajustar à tela" onClick={act(() => fitView({ ...FIT_VIEW_OPTIONS, duration: 250 }))}>
+        <ControlButton label="Ajustar à tela" onClick={act(() => fitView({ ...FIT_VIEW_OPTIONS, duration: motionMs(DUR.base) }))}>
           <IconFit />
         </ControlButton>
       </div>

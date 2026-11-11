@@ -4,6 +4,7 @@ import type * as Y from 'yjs';
 import { FIT_VIEW_OPTIONS } from '../editor/CanvasControls';
 import { IconFit, IconRedo, IconUndo, IconZoomIn, IconZoomOut } from '../../components/icons';
 import { Spinner } from '../../components/ui';
+import { DUR, motionMs } from '../../lib/motion';
 
 // Controles do fluxograma (SPEC-003 §5.2): desfazer, zoom, grade e Organizar.
 
@@ -59,13 +60,13 @@ export function DiagramControls({
             <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />
           </>
         )}
-        <ControlButton label="Afastar" onClick={act(() => zoomOut({ duration: 150 }))}>
+        <ControlButton label="Afastar" onClick={act(() => zoomOut({ duration: motionMs(DUR.micro) }))}>
           <IconZoomOut />
         </ControlButton>
-        <ControlButton label="Aproximar" onClick={act(() => zoomIn({ duration: 150 }))}>
+        <ControlButton label="Aproximar" onClick={act(() => zoomIn({ duration: motionMs(DUR.micro) }))}>
           <IconZoomIn />
         </ControlButton>
-        <ControlButton label="Ajustar à tela" onClick={act(() => fitView({ ...FIT_VIEW_OPTIONS, duration: 250 }))}>
+        <ControlButton label="Ajustar à tela" onClick={act(() => fitView({ ...FIT_VIEW_OPTIONS, duration: motionMs(DUR.base) }))}>
           <IconFit />
         </ControlButton>
         {canEdit && (

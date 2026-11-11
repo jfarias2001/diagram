@@ -34,6 +34,18 @@
   --on-danger: #ffffff;
   --ok: #17754a;
   --warn: #9a5b06;
+  /* SPEC-009 §5.1 — estados da lateral, escurecimento e elevação. */
+  --nav-hover: #1b1f2a;
+  --nav-active: #232838;
+  --nav-edge: #0e1016;
+  --scrim: rgb(10 14 20 / 0.45);
+  --elev-pop: 0 10px 30px -8px rgb(16 24 40 / 0.18), 0 2px 6px rgb(16 24 40 / 0.06);
+  --elev-modal: 0 24px 60px -12px rgb(16 24 40 / 0.28), 0 4px 12px rgb(16 24 40 / 0.08);
+  /* SPEC-009 §5.1 — ritmo único de movimento (PESQUISA-001 §6). */
+  --dur-micro: 120ms;
+  --dur-fast: 180ms;
+  --dur-base: 240ms;
+  --dur-slow: 320ms;
   color-scheme: light;
 }
 
@@ -59,6 +71,14 @@
     --on-danger: #0f1116;
     --ok: #4ec98a;
     --warn: #f5b74f;
+    --nav-hover: #191d28;
+    --nav-active: #222839;
+    /* No escuro a lateral quase some no quadro: uma borda clara a separa. */
+    --nav-edge: #2a3040;
+    --scrim: rgb(0 0 0 / 0.6);
+    /* Sombra some no escuro: a elevação ganha um contorno claro. */
+    --elev-pop: 0 0 0 1px rgb(255 255 255 / 0.06), 0 12px 32px -8px rgb(0 0 0 / 0.6);
+    --elev-modal: 0 0 0 1px rgb(255 255 255 / 0.07), 0 28px 64px -12px rgb(0 0 0 / 0.7);
     color-scheme: dark;
   }
 }
@@ -113,6 +133,52 @@
   --color-danger: var(--danger);
   --color-on-danger: var(--on-danger);
   --color-ok: var(--ok);
+  --color-nav-hover: var(--nav-hover);
+  --color-nav-active: var(--nav-active);
+  --color-nav-edge: var(--nav-edge);
+  --color-scrim: var(--scrim);
+
+  /* SPEC-009 §5.1 — escalas (antes eram valores soltos em cada componente). */
+  --radius-control: 0.5rem;
+  --radius-pop: 0.75rem;
+  --radius-modal: 1rem;
+  --shadow-pop: var(--elev-pop);
+  --shadow-modal: var(--elev-modal);
+  --text-2xs: 11px;
+  --text-2xs--line-height: 1rem;
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  --animate-fade-in: fade-in var(--dur-fast) var(--ease-out) both;
+  --animate-pop-in: pop-in var(--dur-fast) var(--ease-out) both;
+  --animate-slide-up: slide-up var(--dur-base) var(--ease-out) both;
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  @keyframes shimmer {
+    50% {
+      opacity: 0.55;
+    }
+  }
 }
 
 html,
@@ -217,6 +283,106 @@ body {
   --xy-attribution-background-color: transparent;
 }
 
+/*
+ * SPEC-009 §5.2 — entrada e saída. Quem anima marca `data-state` (enter → open
+ * → exit) pelo `usePresence`; a saída dura ~75% da entrada e usa --ease-exit.
+ */
+[data-motion] {
+  transform-origin: var(--origin, top left);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+[data-motion][data-state='enter'] {
+  opacity: 0;
+}
+[data-motion='pop'][data-state='enter'] {
+  transform: scale(0.96);
+}
+[data-motion='rise'][data-state='enter'] {
+  transform: translateY(8px);
+}
+[data-motion='drawer-right'][data-state='enter'] {
+  transform: translateX(24px);
+}
+[data-motion='drawer-left'][data-state='enter'] {
+  transform: translateX(-100%);
+}
+[data-motion][data-state='exit'] {
+  opacity: 0;
+  transition-duration: 130ms;
+  transition-timing-function: var(--ease-exit);
+}
+[data-motion='pop'][data-state='exit'] {
+  transform: scale(0.97);
+}
+[data-motion='rise'][data-state='exit'] {
+  transform: translateY(4px);
+}
+[data-motion='drawer-right'][data-state='exit'] {
+  transform: translateX(24px);
+}
+[data-motion='drawer-left'][data-state='exit'] {
+  transform: translateX(-100%);
+}
+[data-motion^='drawer'] {
+  transition-duration: var(--dur-slow);
+  transition-timing-function: var(--ease-drawer);
+}
+[data-motion='modal'] {
+  transition-duration: var(--dur-base);
+}
+[data-motion='modal'][data-state='enter'] {
+  transform: scale(0.96) translateY(6px);
+}
+[data-motion='modal'][data-state='exit'] {
+  transform: scale(0.98);
+  transition-duration: 180ms;
+}
+
 dialog::backdrop {
-  background: rgb(10 14 20 / 0.45);
+  background: var(--scrim);
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+dialog[data-state='enter']::backdrop,
+dialog[data-state='exit']::backdrop {
+  opacity: 0;
+}
+
+/* Bloco que acabou de nascer no quadro (SPEC-009 §5.6.2). */
+.react-flow__node.node-born > * {
+  animation: node-born var(--dur-fast) var(--ease-out) both;
+}
+@keyframes node-born {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+/* Bloco saindo (recolher/apagar): só desenho, não recebe clique. */
+.react-flow__node.node-ghost {
+  pointer-events: none;
+}
+
+/*
+ * SPEC-009 §5.1 — "reduzir movimento" do sistema operacional vale para TUDO.
+ * 1 ms (e não 0) para que transitionend/animationend continuem disparando:
+ * o usePresence desmonta o que sai por esses eventos.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
 }
