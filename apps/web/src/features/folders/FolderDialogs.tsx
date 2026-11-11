@@ -4,6 +4,9 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { Button, ErrorText, Field, Input, Modal, Select, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useConfirm } from '../../components/ConfirmDialog';
+import { IconEdit, IconTrash, IconUsers } from '../../components/icons';
+import type { MenuItem } from '../../components/Menu';
+import { errorMessage, toast } from '../../components/toastStore';
 
 // Diálogos das pastas (SPEC-004 §5.2).
 
@@ -75,75 +78,70 @@ export function FolderDialog({ state, onClose }: { state: FolderDialogState | nu
   );
 }
 
-/** Opções da pasta: renomear, membros (se compartilhada e minha) e apagar. */
-export function FolderMenuDialog({
-  folder,
-  onClose,
+/**
+ * Itens do menu "⋯" da pasta (SPEC-009 §5.3): renomear, membros (compartilhada,
+ * no nível de cima) e apagar. Era um diálogo; agora é um menu igual ao do
+ * documento. Quem decide se pode é o servidor — aqui só escondemos o que o
+ * papel não permite (SPEC-004 §7).
+ */
+export function useFolderMenu({
   onRename,
   onMembers,
   onDeleted,
 }: {
-  folder: FolderNode | null;
-  onClose: () => void;
-  onRename: () => void;
-  onMembers: () => void;
-  onDeleted: () => void;
-}) {
+  onRename: (folder: FolderNode) => void;
+  onMembers: (folder: FolderNode) => void;
+  onDeleted: (folder: FolderNode) => void;
+}): (folder: FolderNode) => MenuItem[] {
   const confirm = useConfirm();
   const qc = useQueryClient();
   const remove = useMutation({
-    mutationFn: () => api(`/folders/${folder!.id}`, { method: 'DELETE' }),
-    onSuccess: () => {
+    mutationFn: (folder: FolderNode) => api(`/folders/${folder.id}`, { method: 'DELETE' }),
+    onSuccess: (_data, folder) => {
       qc.invalidateQueries({ queryKey: ['folders'] });
       qc.invalidateQueries({ queryKey: ['documents'] });
-      onDeleted();
-      onClose();
+      onDeleted(folder);
+      toast({ message: `Pasta "${folder.name}" apagada. Os documentos continuam existindo.` });
     },
+    onError: (error) => toast({ message: errorMessage(error), tone: 'error' }),
   });
 
-  const isOwner = folder?.kind === 'PERSONAL' || folder?.myRole === 'OWNER';
-  const canEdit = isOwner || folder?.myRole === 'EDITOR';
-
-  return (
-    <Modal open={!!folder} onClose={onClose} title={folder?.name ?? 'Pasta'}>
-      <div className="flex flex-col gap-3">
-        {canEdit && (isOwner || folder!.depth > 0) && <Button onClick={onRename}>Renomear</Button>}
-        {folder?.kind === 'SHARED' && folder.depth === 0 && (
-          <Button onClick={onMembers}>{folder.myRole === 'OWNER' ? 'Gerenciar membros' : 'Ver membros'}</Button>
-        )}
-        {isOwner && (
-          <>
-            <p className="text-xs text-muted">
-              Apagar a pasta <strong>não apaga os documentos</strong>: eles voltam para "sem pasta".
-              {folder?.kind === 'SHARED' ? ' As subpastas são apagadas junto e o acesso pela pasta acaba.' : ''}
-            </p>
-            <Button
-              variant="danger"
-              busy={remove.isPending}
-              onClick={async () => {
-                const ok = await confirm({
-                  title: `Apagar a pasta "${folder?.name}"?`,
-                  body: 'Os documentos continuam existindo e voltam para "sem pasta".',
-                  confirmLabel: 'Apagar pasta',
-                  danger: true,
-                });
-                if (ok) remove.mutate();
-              }}
-            >
-              Apagar pasta
-            </Button>
-          </>
-        )}
-        <ErrorText error={remove.error} />
-        <div className="flex justify-end">
-          <Button onClick={onClose}>Fechar</Button>
-        </div>
-      </div>
-    </Modal>
-  );
+  return (folder) => {
+    const isOwner = folder.kind === 'PERSONAL' || folder.myRole === 'OWNER';
+    const canEdit = isOwner || folder.myRole === 'EDITOR';
+    const items: MenuItem[] = [];
+    if (canEdit && (isOwner || folder.depth > 0)) {
+      items.push({ label: 'Renomear', icon: IconEdit, onSelect: () => onRename(folder) });
+    }
+    if (folder.kind === 'SHARED' && folder.depth === 0) {
+      items.push({
+        label: folder.myRole === 'OWNER' ? 'Gerenciar membros' : 'Ver membros',
+        icon: IconUsers,
+        onSelect: () => onMembers(folder),
+      });
+    }
+    if (isOwner) {
+      items.push({
+        label: 'Apagar pasta',
+        icon: IconTrash,
+        danger: true,
+        onSelect: async () => {
+          const ok = await confirm({
+            title: `Apagar a pasta "${folder.name}"?`,
+            body:
+              'Os documentos continuam existindo e voltam para "sem pasta".' +
+              (folder.kind === 'SHARED' ? ' As subpastas são apagadas junto e o acesso pela pasta acaba.' : ''),
+            confirmLabel: 'Apagar pasta',
+            danger: true,
+          });
+          if (ok) remove.mutate(folder);
+        },
+      });
+    }
+    return items;
+  };
 }
 
-/** Membros da pasta compartilhada — mesmo desenho do compartilhamento de documento. */
 export function FolderMembersDialog({ folder, onClose }: { folder: FolderNode | null; onClose: () => void }) {
   const qc = useQueryClient();
   const [email, setEmail] = useState('');

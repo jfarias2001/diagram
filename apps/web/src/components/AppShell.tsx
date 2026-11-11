@@ -1,7 +1,8 @@
-import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { useLogout, useMe } from '../features/auth/session';
 import { IconChevronDown, IconKey, IconLogout, IconMenu, IconUsers } from './icons';
+import { Menu } from './Menu';
 import { Avatar, Logo } from './ui';
 
 // SPEC-008 §5.3 — lateral escura fixa + conteúdo, no lugar do cabeçalho claro.
@@ -103,58 +104,31 @@ export function SidebarSection({ title, action, children }: { title: string; act
 }
 
 function UserMenu({ name, email }: { name: string; email: string }) {
-  const [open, setOpen] = useState(false);
   const logout = useLogout();
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [open]);
-
+  const navigate = useNavigate();
   return (
-    <div ref={ref} className="relative" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm text-nav-muted transition hover:bg-white/8 hover:text-nav-ink"
-      >
-        <Avatar name={name} size={26} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-nav-ink">{name}</span>
-          <span className="block truncate text-xs">{email}</span>
-        </span>
-        <IconChevronDown size={16} />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute bottom-full left-0 z-20 mb-1 w-full overflow-hidden rounded-xl border border-line bg-surface p-1 text-ink shadow-lg"
+    <Menu
+      label="Conta"
+      placement="top-start"
+      width="w-full"
+      items={[
+        { label: 'Trocar senha', icon: IconKey, onSelect: () => navigate('/trocar-senha') },
+        { label: 'Sair', icon: IconLogout, onSelect: () => logout.mutate() },
+      ]}
+      trigger={(props) => (
+        <button
+          type="button"
+          {...props}
+          className="flex w-full items-center gap-2.5 rounded-control px-2 py-2 text-left text-sm text-nav-muted transition-colors duration-(--dur-micro) hover:bg-nav-hover hover:text-nav-ink"
         >
-          <Link
-            role="menuitem"
-            to="/trocar-senha"
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-surface-2"
-          >
-            <IconKey size={16} />
-            Trocar senha
-          </Link>
-          <button
-            role="menuitem"
-            type="button"
-            onClick={() => logout.mutate()}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-2"
-          >
-            <IconLogout size={16} />
-            Sair
-          </button>
-        </div>
+          <Avatar name={name} size={26} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium text-nav-ink">{name}</span>
+            <span className="block truncate text-xs">{email}</span>
+          </span>
+          <IconChevronDown size={16} />
+        </button>
       )}
-    </div>
+    />
   );
 }

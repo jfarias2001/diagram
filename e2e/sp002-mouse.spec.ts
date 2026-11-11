@@ -66,7 +66,7 @@ test('mapa só com o mouse: barra, "+", duplo clique, nota e link; leitor só l�
 
   // Mapa novo.
   await admin.goto('/');
-  await admin.getByRole('button', { name: '+ Criar' }).click();
+  await admin.getByRole('button', { name: 'Criar', exact: true }).click();
   await admin.getByRole('menuitem', { name: /Mapa mental/ }).click();
   await admin.getByLabel('Título').fill('Compras pelo mouse');
   await admin.getByRole('button', { name: 'Criar mapa' }).click();

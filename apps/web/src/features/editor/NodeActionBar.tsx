@@ -373,7 +373,7 @@ export function NodeActionBar({
         </div>
 
         {popover && (
-          <div className={`absolute z-10 ${popoverSide}`}>
+          <div className={`absolute z-10 animate-pop-in ${popoverSide.includes('bottom-[') ? 'origin-bottom' : 'origin-top'} ${popoverSide}`}>
             {popover === 'menu' && <ActionMenu groups={groups} label="Ações do tópico" onClose={close} />}
             {popover === 'color' && canEdit && (
               <NodeColors

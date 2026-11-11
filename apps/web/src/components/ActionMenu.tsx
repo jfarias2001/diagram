@@ -36,9 +36,18 @@ export function ActionMenu({
   const ref = useRef<HTMLDivElement>(null);
   const items = groups.flatMap((g) => g.items).filter((i) => !i.disabled);
 
-  // O primeiro item recebe o foco: o menu é navegável só pelo teclado.
+  // O primeiro item recebe o foco: o menu é navegável só pelo teclado. Ao
+  // fechar, o foco volta para quem abriu — a não ser que o fechamento já o
+  // tenha levado a outro lugar (o mapa devolve ao quadro) — SPEC-009 §5.3.
   useEffect(() => {
-    ref.current?.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const menu = ref.current;
+    menu?.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
+    return () => {
+      const active = document.activeElement;
+      const lost = !active || active === document.body || !!menu?.contains(active);
+      if (lost && opener?.isConnected) opener.focus({ preventScroll: true });
+    };
   }, []);
 
   const move = (from: HTMLElement, step: number) => {
@@ -77,13 +86,13 @@ export function ActionMenu({
       role="menu"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className="export-hidden max-h-[60vh] w-[268px] overflow-y-auto rounded-2xl border border-line bg-surface p-2 shadow-xl"
+      className="export-hidden max-h-[60vh] w-[268px] animate-pop-in overflow-y-auto rounded-modal border border-line bg-surface p-2 shadow-pop"
     >
       {groups
         .filter((group) => group.items.length > 0)
         .map((group) => (
           <div key={group.title} className="mb-1 last:mb-0">
-            <p className="px-2 pt-1.5 pb-1 text-[10px] font-semibold tracking-wider text-muted uppercase">
+            <p className="px-2 pt-1.5 pb-1 text-2xs font-semibold tracking-wider text-muted uppercase">
               {group.title}
             </p>
             <div className="grid grid-cols-3 gap-1">
@@ -97,15 +106,15 @@ export function ActionMenu({
                   title={item.shortcut ? `${item.label} (${item.shortcut})` : item.label}
                   onClick={item.onSelect}
                   className={[
-                    'flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-center transition',
+                    'flex flex-col items-center gap-1 rounded-pop px-1 py-2 text-center transition-colors duration-(--dur-micro)',
                     'focus:bg-surface-2 focus:outline-none',
                     item.pressed ? 'bg-brand-soft text-brand-ink' : 'text-ink hover:bg-surface-2',
                     item.danger ? 'hover:bg-danger/10 hover:text-danger' : '',
                   ].join(' ')}
                 >
                   <item.icon size={20} />
-                  <span className="text-[11px] leading-tight font-medium">{item.label}</span>
-                  {item.shortcut && <span className="text-[10px] text-muted">{item.shortcut}</span>}
+                  <span className="text-2xs leading-tight font-medium">{item.label}</span>
+                  {item.shortcut && <span className="text-2xs text-muted">{item.shortcut}</span>}
                 </button>
               ))}
             </div>

@@ -146,7 +146,7 @@ export function ShapeSelectionBar({
           />
         )}
         {popover && popover !== 'menu' && (
-          <div className="rounded-xl border border-line bg-surface p-2.5 shadow-lg">
+          <div className="animate-pop-in rounded-pop border border-line bg-surface p-2.5 shadow-pop">
             <ColorPicker
               key={popover}
               label={popover === 'fill' ? 'Cor de fundo' : popover === 'stroke' ? 'Cor da borda' : 'Cor do texto'}

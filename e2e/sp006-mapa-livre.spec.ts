@@ -62,7 +62,7 @@ test('mapa: arrastar posiciona, organizar volta, formato e cor do bloco', async 
   await loginAdmin(admin);
 
   await admin.goto('/');
-  await admin.getByRole('button', { name: '+ Criar' }).click();
+  await admin.getByRole('button', { name: 'Criar', exact: true }).click();
   await admin.getByRole('menuitem', { name: /Mapa mental/ }).click();
   await admin.getByLabel('Título').fill('Mapa livre');
   await admin.getByRole('button', { name: 'Criar mapa' }).click();

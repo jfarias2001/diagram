@@ -9,7 +9,7 @@ import {
   type ThemeId,
 } from '@diagram/shared';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { navButtonClass, SidebarSection, useSidebarSlot } from '../../components/AppShell';
@@ -20,6 +20,7 @@ import {
   IconListView,
   IconMindMap,
   IconMore,
+  IconPlus,
   IconSearch,
   IconShared,
   IconTrashDoc,
@@ -30,10 +31,11 @@ import {
   FolderDialog,
   type FolderDialogState,
   FolderMembersDialog,
-  FolderMenuDialog,
+  useFolderMenu,
 } from '../folders/FolderDialogs';
 import { FolderBreadcrumb, findFolderPath, FolderSidebar, SEM_PASTA, useFolders } from '../folders/FolderSidebar';
 import { useConfirm } from '../../components/ConfirmDialog';
+import { Menu } from '../../components/Menu';
 
 type Scope = 'mine' | 'shared' | 'trash';
 
@@ -114,8 +116,14 @@ export function DashboardPage() {
   const path = findFolderPath(folders.data, folderId === SEM_PASTA ? null : folderId);
   const currentFolder = path.at(-1) ?? null;
   const [folderDialog, setFolderDialog] = useState<FolderDialogState | null>(null);
-  const [folderMenu, setFolderMenu] = useState<FolderNode | null>(null);
   const [folderMembers, setFolderMembers] = useState<FolderNode | null>(null);
+  const folderMenu = useFolderMenu({
+    onRename: (folder) => setFolderDialog({ mode: 'rename', kind: folder.kind, parentId: folder.parentId, folder }),
+    onMembers: setFolderMembers,
+    onDeleted: (folder) => {
+      if (folderId === folder.id) setParam('pasta', null);
+    },
+  });
   const [movingDoc, setMovingDoc] = useState<DocumentSummary | null>(null);
 
   const list = useInfiniteQuery({
@@ -177,7 +185,7 @@ export function DashboardPage() {
           selectedId={folderId}
           onSelect={(id) => setParam('pasta', id)}
           onCreate={(kind, parentId) => setFolderDialog({ mode: 'create', kind, parentId })}
-          onManage={setFolderMenu}
+          menuFor={folderMenu}
           onDropDocument={(documentId, folder) => move.mutate({ documentId, folder })}
         />
       </SidebarSection>
@@ -312,21 +320,6 @@ export function DashboardPage() {
       />
       <RenameDialog doc={renaming} onClose={() => setRenaming(null)} onDone={invalidate} />
       <FolderDialog state={folderDialog} onClose={() => setFolderDialog(null)} />
-      <FolderMenuDialog
-        folder={folderMenu}
-        onClose={() => setFolderMenu(null)}
-        onRename={() => {
-          setFolderDialog({ mode: 'rename', kind: folderMenu!.kind, parentId: folderMenu!.parentId, folder: folderMenu! });
-          setFolderMenu(null);
-        }}
-        onMembers={() => {
-          setFolderMembers(folderMenu);
-          setFolderMenu(null);
-        }}
-        onDeleted={() => {
-          if (folderId === folderMenu?.id) setParam('pasta', null);
-        }}
-      />
       <FolderMembersDialog folder={folderMembers} onClose={() => setFolderMembers(null)} />
       <MoveDialog
         doc={movingDoc}
@@ -499,97 +492,45 @@ function DocumentItem({
 
 /** Menu "⋯" do documento: as mesmas ações de antes, agora sem poluir o cartão. */
 function CardMenu({ title, actions }: { title: string; actions: Array<{ label: string; run: () => void; danger?: boolean }> }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [open]);
-
   return (
-    <div ref={ref} className="relative shrink-0" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
-      <button
-        type="button"
-        aria-label={`Ações de ${title}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className="rounded-md p-1.5 text-muted transition hover:bg-surface-2 hover:text-ink"
-      >
-        <IconMore size={16} />
-      </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute top-full right-0 z-20 mt-1 flex w-48 flex-col rounded-xl border border-line bg-surface p-1 shadow-lg"
+    <Menu
+      label={`Ações de ${title}`}
+      className="shrink-0"
+      width="w-48"
+      items={actions.map((a) => ({ label: a.label, danger: a.danger, onSelect: a.run }))}
+      trigger={(props) => (
+        <button
+          type="button"
+          {...props}
+          aria-label={`Ações de ${title}`}
+          className="rounded-control p-1.5 text-muted transition-colors duration-(--dur-micro) hover:bg-surface-2 hover:text-ink"
         >
-          {actions.map((a) => (
-            <button
-              key={a.label}
-              role="menuitem"
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                a.run();
-              }}
-              className={`rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-2 ${a.danger ? 'text-danger' : ''}`}
-            >
-              {a.label}
-            </button>
-          ))}
-        </div>
+          <IconMore size={16} />
+        </button>
       )}
-    </div>
+    />
   );
 }
 
 function NewMenu({ onPick }: { onPick: (type: DocumentType) => void }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [open]);
-  const pick = (type: DocumentType) => {
-    setOpen(false);
-    onPick(type);
-  };
   return (
-    <div ref={ref} className="relative" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
-      <Button variant="primary" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        + Criar
-      </Button>
-      {open && (
-        <div role="menu" className="absolute right-0 z-20 mt-2 flex w-60 flex-col rounded-xl border border-line bg-surface p-1 shadow-lg">
-          {(['MINDMAP', 'DIAGRAM'] as const).map((type) => (
-            <button
-              key={type}
-              role="menuitem"
-              type="button"
-              autoFocus={type === 'MINDMAP'}
-              onClick={() => pick(type)}
-              className="flex items-start gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-surface-2 focus:bg-surface-2 focus:outline-none"
-            >
-              <TypeIcon type={type} className="mt-0.5" />
-              <span>
-                <span className="block text-sm font-medium">{TYPE_LABEL[type]}</span>
-                <span className="block text-xs text-muted">
-                  {type === 'MINDMAP' ? 'Ideias em árvore, a partir de um tópico central' : 'Processos com formas, decisões e setas'}
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
+    <Menu
+      label="Criar"
+      width="w-64"
+      items={(['MINDMAP', 'DIAGRAM'] as const).map((type) => ({
+        label: TYPE_LABEL[type],
+        description:
+          type === 'MINDMAP' ? 'Ideias em árvore, a partir de um tópico central' : 'Processos com formas, decisões e setas',
+        icon: type === 'MINDMAP' ? IconMindMap : IconFlow,
+        onSelect: () => onPick(type),
+      }))}
+      trigger={(props) => (
+        <Button variant="primary" {...props}>
+          <IconPlus size={16} strokeWidth={2.25} />
+          Criar
+        </Button>
       )}
-    </div>
+    />
   );
 }
 

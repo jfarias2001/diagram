@@ -65,7 +65,7 @@ test('pasta compartilhada: entrar dá acesso a tudo, sair tira na hora', async (
   await expect(pasta).toBeVisible();
   await pasta.click();
 
-  await admin.getByRole('button', { name: '+ Criar' }).click();
+  await admin.getByRole('button', { name: 'Criar', exact: true }).click();
   await admin.getByRole('menuitem', { name: /Mapa mental/ }).click();
   await admin.getByLabel('Título').fill('Tabela de preços');
   await admin.getByRole('button', { name: 'Criar mapa' }).click();
@@ -76,7 +76,7 @@ test('pasta compartilhada: entrar dá acesso a tudo, sair tira na hora', async (
   // Carla entra na pasta como Leitora.
   await admin.getByRole('link', { name: 'Voltar para os documentos' }).click();
   await admin.getByRole('button', { name: 'Opções da pasta Comercial' }).click();
-  await admin.getByRole('button', { name: 'Gerenciar membros' }).click();
+  await admin.getByRole('menuitem', { name: 'Gerenciar membros' }).click();
   await admin.getByLabel('E-mail do colega').fill(email);
   await admin.getByLabel('Papel na pasta').selectOption('VIEWER');
   await admin.getByRole('button', { name: 'Adicionar' }).click();
@@ -95,7 +95,7 @@ test('pasta compartilhada: entrar dá acesso a tudo, sair tira na hora', async (
 
   // Removida da pasta, perde o acesso — inclusive com o documento aberto.
   await admin.getByRole('button', { name: 'Opções da pasta Comercial' }).click();
-  await admin.getByRole('button', { name: 'Gerenciar membros' }).click();
+  await admin.getByRole('menuitem', { name: 'Gerenciar membros' }).click();
   await admin.getByRole('button', { name: 'Remover' }).click();
   await expect(admin.getByText('Ninguém além de você tem acesso a esta pasta.')).toBeVisible();
 

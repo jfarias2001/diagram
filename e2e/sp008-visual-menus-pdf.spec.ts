@@ -58,7 +58,7 @@ async function addBlock(page: Page, key: 'Enter' | 'Tab', text: string) {
 
 async function newMindMap(page: Page, title: string) {
   await page.goto('/');
-  await page.getByRole('button', { name: '+ Criar' }).click();
+  await page.getByRole('button', { name: 'Criar', exact: true }).click();
   await page.getByRole('menuitem', { name: /Mapa mental/ }).click();
   await page.getByLabel('Título').fill(title);
   await page.getByRole('button', { name: 'Criar mapa' }).click();
@@ -118,7 +118,7 @@ test('painel novo: lateral escura, cartões/lista lembrados e busca', async ({ b
   for (const label of ['Meus documentos', 'Compartilhados comigo', 'Lixeira']) {
     await expect(nav.getByRole('button', { name: label })).toBeVisible();
   }
-  await expect(admin.getByRole('button', { name: '+ Criar' })).toBeVisible();
+  await expect(admin.getByRole('button', { name: 'Criar', exact: true })).toBeVisible();
   await shot(admin, 'sp008-painel-cartoes');
 
   // Alternar para lista e recarregar: a escolha foi lembrada.

@@ -10,6 +10,7 @@ import {
 } from '../../components/icons';
 import { Button, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
+import { Menu, type MenuItem } from '../../components/Menu';
 
 // Lateral de pastas do painel (SPEC-004 §5.1), agora desenhada dentro da
 // lateral escura do shell (SPEC-008 §5.3) — daí os tokens `nav-*`.
@@ -41,7 +42,7 @@ export function FolderSidebar({
   selectedId,
   onSelect,
   onCreate,
-  onManage,
+  menuFor,
   onDropDocument,
 }: {
   tree: FolderTree | undefined;
@@ -49,7 +50,8 @@ export function FolderSidebar({
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onCreate: (kind: FolderKind, parentId: string | null) => void;
-  onManage: (folder: FolderNode) => void;
+  /** Itens do menu "⋯" da pasta (SPEC-009 §5.3), conforme o papel. */
+  menuFor: (folder: FolderNode) => MenuItem[];
   /** Cartão de documento solto em cima de uma pasta. */
   onDropDocument: (documentId: string, folder: FolderNode) => void;
 }) {
@@ -71,7 +73,7 @@ export function FolderSidebar({
             selectedId={selectedId}
             onSelect={onSelect}
             onCreate={onCreate}
-            onManage={onManage}
+            menuFor={menuFor}
             onDropDocument={onDropDocument}
           />
           <Section
@@ -81,7 +83,7 @@ export function FolderSidebar({
             selectedId={selectedId}
             onSelect={onSelect}
             onCreate={onCreate}
-            onManage={onManage}
+            menuFor={menuFor}
             onDropDocument={onDropDocument}
           />
         </>
@@ -97,7 +99,7 @@ function Section({
   selectedId,
   onSelect,
   onCreate,
-  onManage,
+  menuFor,
   onDropDocument,
 }: {
   title: string;
@@ -106,7 +108,8 @@ function Section({
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onCreate: (kind: FolderKind, parentId: string | null) => void;
-  onManage: (folder: FolderNode) => void;
+  /** Itens do menu "⋯" da pasta (SPEC-009 §5.3), conforme o papel. */
+  menuFor: (folder: FolderNode) => MenuItem[];
   onDropDocument: (documentId: string, folder: FolderNode) => void;
 }) {
   return (
@@ -137,7 +140,7 @@ function Section({
               selectedId={selectedId}
               onSelect={onSelect}
               onCreate={onCreate}
-              onManage={onManage}
+              menuFor={menuFor}
               onDropDocument={onDropDocument}
             />
           ))}
@@ -153,7 +156,7 @@ function FolderRow({
   selectedId,
   onSelect,
   onCreate,
-  onManage,
+  menuFor,
   onDropDocument,
 }: {
   node: FolderNode;
@@ -161,7 +164,8 @@ function FolderRow({
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onCreate: (kind: FolderKind, parentId: string | null) => void;
-  onManage: (folder: FolderNode) => void;
+  /** Itens do menu "⋯" da pasta (SPEC-009 §5.3), conforme o papel. */
+  menuFor: (folder: FolderNode) => MenuItem[];
   onDropDocument: (documentId: string, folder: FolderNode) => void;
 }) {
   const [open, setOpen] = useState(true);
@@ -214,15 +218,25 @@ function FolderRow({
             <span className="ml-auto shrink-0 text-xs text-nav-muted">{node.documentCount}</span>
           )}
         </button>
-        <button
-          type="button"
-          onClick={() => onManage(node)}
-          aria-label={`Opções da pasta ${node.name}`}
-          title="Opções da pasta"
-          className="shrink-0 rounded-md p-1 text-nav-muted opacity-0 group-hover:opacity-100 hover:bg-white/10 hover:text-nav-ink focus:opacity-100"
-        >
-          <IconMore size={15} />
-        </button>
+        <Menu
+          label={`Opções da pasta ${node.name}`}
+          placement="bottom-start"
+          width="w-52"
+          className="shrink-0"
+          items={menuFor(node)}
+          trigger={(props) => (
+            <button
+              type="button"
+              {...props}
+              aria-label={`Opções da pasta ${node.name}`}
+              title="Opções da pasta"
+              // No toque não existe hover: o "⋯" fica sempre visível (SPEC-009 §5.5).
+              className="rounded-md p-1 text-nav-muted opacity-0 transition-opacity duration-(--dur-micro) group-hover:opacity-100 pointer-coarse:opacity-100 hover:bg-nav-active hover:text-nav-ink focus:opacity-100 aria-expanded:opacity-100"
+            >
+              <IconMore size={15} />
+            </button>
+          )}
+        />
       </div>
       {open && hasChildren && (
         <ul>
@@ -234,7 +248,7 @@ function FolderRow({
               selectedId={selectedId}
               onSelect={onSelect}
               onCreate={onCreate}
-              onManage={onManage}
+              menuFor={menuFor}
               onDropDocument={onDropDocument}
             />
           ))}

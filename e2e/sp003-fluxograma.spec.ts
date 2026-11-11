@@ -98,7 +98,7 @@ test('fluxograma: paleta, setas, organizar, colar e leitor só lê', async ({ br
 
   // Novo fluxograma pelo menu do painel.
   await admin.goto('/');
-  await admin.getByRole('button', { name: '+ Criar' }).click();
+  await admin.getByRole('button', { name: 'Criar', exact: true }).click();
   await admin.getByRole('menuitem', { name: /Fluxograma/ }).click();
   await admin.getByLabel('Título').fill('Fluxo de pedido');
   await admin.getByRole('button', { name: 'Criar fluxograma' }).click();
