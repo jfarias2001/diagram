@@ -3,7 +3,6 @@ import {
   type DocumentList,
   type DocumentSummary,
   type DocumentType,
-  type FolderKind,
   type FolderNode,
   type FolderTree,
   type ThemeId,
@@ -27,6 +26,7 @@ import {
 } from '../../components/icons';
 import { Button, ErrorText, Field, Input, Modal, relativeTime, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
+import { INLINE_ERROR } from '../../lib/mutations';
 import {
   FolderDialog,
   type FolderDialogState,
@@ -36,6 +36,10 @@ import {
 import { FolderBreadcrumb, findFolderPath, FolderSidebar, SEM_PASTA, useFolders } from '../folders/FolderSidebar';
 import { useConfirm } from '../../components/ConfirmDialog';
 import { Menu } from '../../components/Menu';
+import { toast } from '../../components/toastStore';
+import { type MoveStep, undoMoveSteps } from './undoMove';
+
+type DocAction = 'trash' | 'restore' | 'delete' | 'duplicate';
 
 type Scope = 'mine' | 'shared' | 'trash';
 
@@ -144,20 +148,67 @@ export function DashboardPage() {
     qc.invalidateQueries({ queryKey: ['documents'] });
     qc.invalidateQueries({ queryKey: ['folders'] });
   };
+  // SPEC-009 §5.4 — toda ação do cartão responde com um aviso; as que dão
+  // para voltar atrás oferecem "Desfazer", pelas mesmas rotas de sempre.
   const action = useMutation({
-    mutationFn: ({ path, method }: { path: string; method: 'POST' | 'DELETE' }) =>
-      api(path, { method, ...(method === 'POST' ? { json: {} } : {}) }),
-    onSuccess: invalidate,
+    mutationFn: ({ doc, kind }: { doc: DocumentSummary; kind: DocAction }) =>
+      kind === 'delete'
+        ? api(`/documents/${doc.id}`, { method: 'DELETE' })
+        : api<DocumentSummary | undefined>(`/documents/${doc.id}/${kind}`, { method: 'POST', json: {} }),
+    onSuccess: (result, { doc, kind }) => {
+      invalidate();
+      const title = doc.title || 'Sem título';
+      if (kind === 'trash') {
+        toast({
+          message: `"${title}" foi para a lixeira.`,
+          action: {
+            label: 'Desfazer',
+            run: async () => {
+              await api(`/documents/${doc.id}/restore`, { method: 'POST', json: {} });
+              invalidate();
+              toast({ message: `"${title}" voltou para o lugar de antes.` });
+            },
+          },
+        });
+      } else if (kind === 'restore') {
+        toast({ message: `"${title}" foi restaurado.` });
+      } else if (kind === 'delete') {
+        toast({ message: `"${title}" foi apagado de vez.` });
+      } else {
+        const copy = result as DocumentSummary | undefined;
+        toast({
+          message: `Cópia de "${title}" criada.`,
+          ...(copy ? { action: { label: 'Abrir', run: () => navigate(`/m/${copy.id}`) } } : {}),
+        });
+      }
+    },
   });
 
   /** Move um documento para uma pasta (ou para fora, com `null`). */
+  const putFolder = (documentId: string, step: MoveStep) =>
+    api(`/documents/${documentId}/${step.route}`, { method: 'PUT', json: { folderId: step.folderId } });
   const move = useMutation({
-    mutationFn: ({ documentId, folder }: { documentId: string; folder: FolderNode | null; kind?: FolderKind }) => {
-      const kind = folder?.kind ?? 'PERSONAL';
-      const route = kind === 'SHARED' ? 'shared-folder' : 'personal-folder';
-      return api(`/documents/${documentId}/${route}`, { method: 'PUT', json: { folderId: folder?.id ?? null } });
+    mutationFn: ({ doc, folder }: { doc: DocumentSummary; folder: FolderNode | null }) =>
+      putFolder(doc.id, {
+        route: folder?.kind === 'SHARED' ? 'shared-folder' : 'personal-folder',
+        folderId: folder?.id ?? null,
+      }),
+    onSuccess: (_r, { doc, folder }) => {
+      invalidate();
+      const previous = doc.folder ? { id: doc.folder.id, kind: doc.folder.kind } : null;
+      const target = folder ? { id: folder.id, kind: folder.kind } : null;
+      toast({
+        message: folder ? `Movido para "${folder.name}".` : 'Tirado da pasta.',
+        action: {
+          label: 'Desfazer',
+          run: async () => {
+            for (const step of undoMoveSteps(previous, target)) await putFolder(doc.id, step);
+            invalidate();
+            toast({ message: doc.folder ? `De volta para "${doc.folder.name}".` : 'De volta para "sem pasta".' });
+          },
+        },
+      });
     },
-    onSuccess: invalidate,
   });
 
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
@@ -186,7 +237,10 @@ export function DashboardPage() {
           onSelect={(id) => setParam('pasta', id)}
           onCreate={(kind, parentId) => setFolderDialog({ mode: 'create', kind, parentId })}
           menuFor={folderMenu}
-          onDropDocument={(documentId, folder) => move.mutate({ documentId, folder })}
+          onDropDocument={(documentId, folder) => {
+            const doc = items.find((d) => d.id === documentId);
+            if (doc) move.mutate({ doc, folder });
+          }}
         />
       </SidebarSection>
     </>
@@ -272,7 +326,7 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <ErrorText error={list.error ?? action.error} />
+      <ErrorText error={list.error} />
 
       {list.isPending ? (
         <div className="flex justify-center py-16 text-muted">
@@ -297,7 +351,7 @@ export function DashboardPage() {
               searching={!!q}
               onRename={() => setRenaming(doc)}
               onMove={() => setMovingDoc(doc)}
-              onAction={(path, method) => action.mutate({ path, method })}
+              onAction={(kind) => action.mutate({ doc, kind })}
               onOpen={() => navigate(`/m/${doc.id}`)}
             />
           ))}
@@ -318,7 +372,14 @@ export function DashboardPage() {
         onClose={() => setCreating(null)}
         onCreated={invalidate}
       />
-      <RenameDialog doc={renaming} onClose={() => setRenaming(null)} onDone={invalidate} />
+      <RenameDialog
+        doc={renaming}
+        onClose={() => setRenaming(null)}
+        onDone={() => {
+          invalidate();
+          toast({ message: 'Documento renomeado.' });
+        }}
+      />
       <FolderDialog state={folderDialog} onClose={() => setFolderDialog(null)} />
       <FolderMembersDialog folder={folderMembers} onClose={() => setFolderMembers(null)} />
       <MoveDialog
@@ -326,7 +387,7 @@ export function DashboardPage() {
         tree={folders.data}
         onClose={() => setMovingDoc(null)}
         onMove={(folder) => {
-          move.mutate({ documentId: movingDoc!.id, folder });
+          move.mutate({ doc: movingDoc!, folder });
           setMovingDoc(null);
         }}
       />
@@ -379,7 +440,7 @@ function DocumentItem({
   searching: boolean;
   onRename: () => void;
   onMove: () => void;
-  onAction: (path: string, method: 'POST' | 'DELETE') => void;
+  onAction: (kind: DocAction) => void;
   onOpen: () => void;
 }) {
   const canEdit = doc.myRole === 'OWNER' || doc.myRole === 'EDITOR';
@@ -389,7 +450,7 @@ function DocumentItem({
 
   const actions: Array<{ label: string; run: () => void; danger?: boolean }> = inTrash
     ? [
-        { label: 'Restaurar', run: () => onAction(`/documents/${doc.id}/restore`, 'POST') },
+        { label: 'Restaurar', run: () => onAction('restore') },
         {
           label: 'Apagar de vez',
           danger: true,
@@ -400,7 +461,7 @@ function DocumentItem({
               confirmLabel: 'Apagar de vez',
               danger: true,
             });
-            if (ok) onAction(`/documents/${doc.id}`, 'DELETE');
+            if (ok) onAction('delete');
           },
         },
       ]
@@ -408,13 +469,13 @@ function DocumentItem({
         { label: 'Abrir', run: onOpen },
         ...(canEdit ? [{ label: 'Renomear', run: onRename }] : []),
         { label: 'Mover para…', run: onMove },
-        { label: 'Duplicar', run: () => onAction(`/documents/${doc.id}/duplicate`, 'POST') },
+        { label: 'Duplicar', run: () => onAction('duplicate') },
         ...(doc.myRole === 'OWNER'
           ? [
               {
                 label: 'Mover para a lixeira',
                 danger: true,
-                run: () => onAction(`/documents/${doc.id}/trash`, 'POST'),
+                run: () => onAction('trash'),
               },
             ]
           : []),
@@ -561,6 +622,7 @@ function CreateDialog({
     if (type) setTitle('');
   }, [type]);
   const create = useMutation({
+    ...INLINE_ERROR,
     mutationFn: async () => {
       const doc = await api<DocumentSummary>('/documents', { method: 'POST', json: { title: title.trim(), type } });
       if (folder) {
@@ -605,6 +667,7 @@ function RenameDialog({ doc, onClose, onDone }: { doc: DocumentSummary | null; o
   const [title, setTitle] = useState('');
   useEffect(() => setTitle(doc?.title ?? ''), [doc]);
   const rename = useMutation({
+    ...INLINE_ERROR,
     mutationFn: () => api(`/documents/${doc!.id}`, { method: 'PATCH', json: { title: title.trim() } }),
     onSuccess: () => {
       onDone();

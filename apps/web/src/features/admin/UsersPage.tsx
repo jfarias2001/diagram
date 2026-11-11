@@ -5,6 +5,7 @@ import { Button, ErrorText, Field, Input, Modal, relativeTime, Select, Spinner }
 import { api } from '../../lib/api';
 import { useMe } from '../auth/session';
 import { useConfirm } from '../../components/ConfirmDialog';
+import { INLINE_ERROR } from '../../lib/mutations';
 
 const usersKey = ['admin-users'] as const;
 
@@ -47,7 +48,7 @@ export function UsersPage() {
         </Button>
       </div>
 
-      <ErrorText error={users.error ?? update.error ?? reset.error} />
+      <ErrorText error={users.error} />
 
       {users.isPending ? (
         <div className="flex justify-center py-16 text-muted">
@@ -162,6 +163,7 @@ function CreateUserDialog({
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('MEMBER');
   const create = useMutation({
+    ...INLINE_ERROR,
     mutationFn: () =>
       api<{ user: AdminUser; temporaryPassword: string }>('/admin/users', { method: 'POST', json: { name, email, role } }),
     onSuccess: (res) => {

@@ -12,12 +12,14 @@ import { ChangePasswordPage } from './features/auth/ChangePasswordPage';
 import { LoginPage } from './features/auth/LoginPage';
 import { RequireAuth } from './features/auth/RequireAuth';
 import { DashboardPage } from './features/dashboard/DashboardPage';
+import { mutationCache } from './lib/mutations';
 import './index.css';
 
 // O editor (React Flow, Yjs) é o pedaço mais pesado: carrega sob demanda.
 const EditorPage = lazy(() => import('./features/editor/EditorPage'));
 
 const queryClient = new QueryClient({
+  mutationCache,
   defaultOptions: { queries: { refetchOnWindowFocus: true, retry: 1 } },
 });
 

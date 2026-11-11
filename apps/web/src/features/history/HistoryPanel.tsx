@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Button, ErrorText, Input, relativeTime, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
 import { IconClose } from '../../components/icons';
+import { INLINE_ERROR } from '../../lib/mutations';
+import { toast } from '../../components/toastStore';
 
 // Painel de histórico do documento (SPEC-005 §5.1). Todos os papéis veem;
 // só Editor e Dono criam e restauram.
@@ -46,12 +48,14 @@ export function HistoryPanel({
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['versions', documentId] });
   const save = useMutation({
+    ...INLINE_ERROR,
     mutationFn: () =>
       api(`/documents/${documentId}/versions`, { method: 'POST', json: { kind: 'NAMED', name: name.trim() } }),
     onSuccess: () => {
       setNaming(false);
       setName('');
       invalidate();
+      toast({ message: 'Versão salva no histórico.' });
     },
   });
 

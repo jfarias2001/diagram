@@ -83,7 +83,7 @@ export function Toaster() {
           )}
           <button
             type="button"
-            aria-label="Fechar aviso"
+            aria-label="Dispensar aviso"
             onClick={() => dismissToast(item.id)}
             className="shrink-0 rounded-control p-1 text-muted hover:bg-surface-2 hover:text-ink"
           >

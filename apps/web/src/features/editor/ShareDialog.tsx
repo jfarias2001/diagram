@@ -4,7 +4,9 @@ import { type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Avatar, Button, ErrorText, Input, Modal, Select, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
+import { INLINE_ERROR } from '../../lib/mutations';
 import { useConfirm } from '../../components/ConfirmDialog';
+import { toast } from '../../components/toastStore';
 
 const ROLE_LABEL: Record<Role, string> = {
   OWNER: 'Dono',
@@ -43,22 +45,48 @@ export function ShareDialog({
   const refresh = () => qc.invalidateQueries({ queryKey: key });
 
   const add = useMutation({
+    ...INLINE_ERROR,
     mutationFn: () => api(`/documents/${documentId}/members`, { method: 'POST', json: { email, role } }),
     onSuccess: () => {
       setEmail('');
       refresh();
+      toast({ message: 'Acesso compartilhado.' });
     },
   });
   const change = useMutation({
     mutationFn: (v: { userId: string; role: ShareRole }) =>
       api(`/documents/${documentId}/members/${v.userId}`, { method: 'PATCH', json: { role: v.role } }),
-    onSuccess: refresh,
+    onSuccess: () => {
+      refresh();
+      toast({ message: 'Papel atualizado.' });
+    },
   });
+  // O membro removido é guardado antes (onMutate): o "Desfazer" convida de
+  // novo com o mesmo e-mail e papel, pela mesma rota de convite (SPEC-009 §3).
   const remove = useMutation({
     mutationFn: (userId: string) => api(`/documents/${documentId}/members/${userId}`, { method: 'DELETE' }),
-    onSuccess: (_r, userId) => {
-      if (userId === myId) navigate('/');
-      else refresh();
+    onMutate: (userId) => members.data?.items.find((m) => m.userId === userId),
+    onSuccess: (_r, userId, removed) => {
+      if (userId === myId) {
+        navigate('/');
+        return;
+      }
+      refresh();
+      if (!removed || removed.role === 'OWNER') return;
+      toast({
+        message: `${removed.name} não tem mais acesso.`,
+        action: {
+          label: 'Desfazer',
+          run: async () => {
+            await api(`/documents/${documentId}/members`, {
+              method: 'POST',
+              json: { email: removed.email, role: removed.role },
+            });
+            refresh();
+            toast({ message: `${removed.name} tem acesso de novo.` });
+          },
+        },
+      });
     },
   });
 
@@ -95,7 +123,7 @@ export function ShareDialog({
         </form>
       )}
 
-      <ErrorText error={add.error ?? change.error ?? remove.error ?? members.error} />
+      <ErrorText error={add.error ?? members.error} />
 
       <div className="flex flex-col gap-1">
         <p className="text-sm font-medium">Quem tem acesso</p>

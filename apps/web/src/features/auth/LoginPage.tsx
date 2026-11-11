@@ -5,6 +5,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router';
 import { Button, ErrorText, Field, Input, Logo } from '../../components/ui';
 import { api } from '../../lib/api';
 import { meKey, useMe } from './session';
+import { INLINE_ERROR } from '../../lib/mutations';
 
 export function LoginPage() {
   const [params] = useSearchParams();
@@ -16,6 +17,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
 
   const login = useMutation({
+    ...INLINE_ERROR,
     mutationFn: () => api<{ user: Me }>('/auth/login', { method: 'POST', json: { email, password } }),
     onSuccess: ({ user }) => {
       qc.setQueryData(meKey, user);

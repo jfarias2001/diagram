@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { Button, ErrorText, Field, Input, Logo } from '../../components/ui';
 import { api } from '../../lib/api';
 import { meKey, useLogout, useMe } from './session';
+import { INLINE_ERROR } from '../../lib/mutations';
 
 export function ChangePasswordPage() {
   const me = useMe();
@@ -18,6 +19,7 @@ export function ChangePasswordPage() {
   const forced = me.data?.mustChangePassword ?? false;
 
   const change = useMutation({
+    ...INLINE_ERROR,
     mutationFn: () => api<{ user: Me }>('/auth/change-password', { method: 'POST', json: { currentPassword, newPassword } }),
     onSuccess: ({ user }) => {
       qc.setQueryData(meKey, user);

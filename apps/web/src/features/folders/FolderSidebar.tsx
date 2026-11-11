@@ -11,6 +11,7 @@ import {
 import { Button, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
 import { Menu, type MenuItem } from '../../components/Menu';
+import { DUR, motionMs } from '../../lib/motion';
 
 // Lateral de pastas do painel (SPEC-004 §5.1), agora desenhada dentro da
 // lateral escura do shell (SPEC-008 §5.3) — daí os tokens `nav-*`.
@@ -184,7 +185,16 @@ function FolderRow({
           e.preventDefault();
           setOver(false);
           const documentId = e.dataTransfer.getData('text/x-paglamp-document');
-          if (documentId) onDropDocument(documentId, node);
+          if (!documentId) return;
+          // "Caiu aqui": a linha da pasta pulsa uma vez (SPEC-009 §5.5).
+          const ms = motionMs(DUR.base);
+          if (ms > 0) {
+            e.currentTarget.animate(
+              [{ transform: 'scale(1)' }, { transform: 'scale(1.04)' }, { transform: 'scale(1)' }],
+              { duration: ms, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' },
+            );
+          }
+          onDropDocument(documentId, node);
         }}
         className={`group flex items-center gap-1 rounded-lg pr-1 ${over ? 'ring-2 ring-brand' : ''}`}
         style={{ paddingLeft: depth * 12 }}

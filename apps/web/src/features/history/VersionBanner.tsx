@@ -2,8 +2,9 @@ import type { DocumentSummary, RestoreResult, VersionSummary } from '@diagram/sh
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useConfirm } from '../../components/ConfirmDialog';
-import { Button, ErrorText } from '../../components/ui';
+import { Button } from '../../components/ui';
 import { api } from '../../lib/api';
+import { toast } from '../../components/toastStore';
 
 // Faixa do modo versão (SPEC-005 §5.2).
 
@@ -31,6 +32,7 @@ export function VersionBanner({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['versions', documentId] });
       onBack(); // o quadro atual já chega restaurado pelo Yjs
+      toast({ message: 'Versão restaurada. O estado anterior ficou guardado no histórico.' });
     },
   });
 
@@ -40,6 +42,7 @@ export function VersionBanner({
     onSuccess: (doc) => {
       qc.invalidateQueries({ queryKey: ['documents'] });
       navigate(`/m/${doc.id}`);
+      toast({ message: `Cópia "${doc.title}" criada a partir da versão.` });
     },
   });
 
@@ -77,7 +80,6 @@ export function VersionBanner({
         </Button>
         <Button onClick={onBack}>Voltar ao atual</Button>
       </div>
-      <ErrorText error={restore.error ?? copy.error} />
     </div>
   );
 }

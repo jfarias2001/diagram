@@ -7,6 +7,7 @@ import { useConfirm } from '../../components/ConfirmDialog';
 import { IconEdit, IconTrash, IconUsers } from '../../components/icons';
 import type { MenuItem } from '../../components/Menu';
 import { errorMessage, toast } from '../../components/toastStore';
+import { INLINE_ERROR } from '../../lib/mutations';
 
 // Diálogos das pastas (SPEC-004 §5.2).
 
@@ -26,6 +27,7 @@ export function FolderDialog({ state, onClose }: { state: FolderDialogState | nu
   useEffect(() => setName(state?.folder?.name ?? ''), [state]);
 
   const save = useMutation({
+    ...INLINE_ERROR,
     mutationFn: () =>
       state?.mode === 'rename'
         ? api(`/folders/${state.folder!.id}`, { method: 'PATCH', json: { name: name.trim() } })
@@ -35,6 +37,7 @@ export function FolderDialog({ state, onClose }: { state: FolderDialogState | nu
           }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['folders'] });
+      toast({ message: state?.mode === 'rename' ? 'Pasta renomeada.' : `Pasta "${name.trim()}" criada.` });
       onClose();
     },
   });
@@ -159,20 +162,44 @@ export function FolderMembersDialog({ folder, onClose }: { folder: FolderNode | 
     qc.invalidateQueries({ queryKey: ['folders'] });
   };
   const add = useMutation({
+    ...INLINE_ERROR,
     mutationFn: () => api(`/folders/${folder!.id}/members`, { method: 'POST', json: { email: email.trim(), role } }),
     onSuccess: () => {
       setEmail('');
       invalidate();
+      toast({ message: 'Membro adicionado.' });
     },
   });
   const change = useMutation({
     mutationFn: (v: { userId: string; role: FolderRole }) =>
       api(`/folders/${folder!.id}/members/${v.userId}`, { method: 'PATCH', json: { role: v.role } }),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      toast({ message: 'Papel atualizado.' });
+    },
   });
   const remove = useMutation({
     mutationFn: (userId: string) => api(`/folders/${folder!.id}/members/${userId}`, { method: 'DELETE' }),
-    onSuccess: invalidate,
+    onMutate: (userId) => ({ folderId: folder!.id, member: members.data?.items.find((m) => m.userId === userId) }),
+    onSuccess: (_r, _userId, ctx) => {
+      invalidate();
+      const removed = ctx?.member;
+      if (!removed) return;
+      toast({
+        message: `${removed.name} saiu da pasta.`,
+        action: {
+          label: 'Desfazer',
+          run: async () => {
+            await api(`/folders/${ctx.folderId}/members`, {
+              method: 'POST',
+              json: { email: removed.email, role: removed.role },
+            });
+            invalidate();
+            toast({ message: `${removed.name} voltou para a pasta.` });
+          },
+        },
+      });
+    },
   });
 
   return (
@@ -215,7 +242,7 @@ export function FolderMembersDialog({ folder, onClose }: { folder: FolderNode | 
             </Button>
           </form>
         )}
-        <ErrorText error={add.error ?? change.error ?? remove.error ?? members.error} />
+        <ErrorText error={add.error ?? members.error} />
 
         {members.isPending ? (
           <div className="flex justify-center py-6 text-muted">
