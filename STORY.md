@@ -25,10 +25,10 @@
 
 ## Estado atual (atualize a cada entrada)
 
-- **Fase:** SPEC-001 a 008 **todas implementadas e testadas** (415+ testes + 14 E2E); ainda não publicadas na VPS. PESQUISA-001 feita; PRD-009 em rascunho.
+- **Fase:** SPEC-001 a 008 **todas implementadas e testadas** (415+ testes + 14 E2E); ainda não publicadas na VPS. PESQUISA-001 feita; **PRD-009 aprovado**; SPEC-009 em rascunho.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
-- **Próximo passo:** aprovação do **PRD-009 (movimento e acabamento)**, primeira onda do roteiro da PESQUISA-001; em paralelo, primeiro deploy na VPS e PRD de backup do banco.
+- **Próximo passo:** aprovação da **SPEC-009 (movimento e acabamento)** e implementação em 16 blocos com commit próprio; em paralelo, primeiro deploy na VPS e PRD de backup do banco.
 
 ---
 
@@ -72,7 +72,8 @@
 - Checks: typecheck, lint, **417 testes** (104 shared + 115 web + 198 api) e build verdes; **14 E2E** verdes.
 
 **Pendências / próximos passos**
-- [ ] **Aprovar o PRD-009** e responder às 4 perguntas da §9 dele; depois vem a SPEC-009.
+- [x] PRD-009 aprovado em 2026-11-11, com as propostas da §9 valendo como decisão.
+- [ ] **Aprovar a SPEC-009**, inclusive os 2 pontos marcados "[Pede aprovação]" na §10.
 - [ ] O bug do Espaço não ganhou teste automático (o tratamento de teclado do fluxograma só tem cobertura E2E); entra no E2E da SPEC-009.
 - [ ] Ondas 2 a 7 do roteiro (PESQUISA-001 §5); a de IA exige ADR sobre provedor e privacidade.
 - [ ] Primeiro deploy na VPS e PRD de backup do banco.

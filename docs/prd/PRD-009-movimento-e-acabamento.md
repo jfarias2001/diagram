@@ -2,10 +2,10 @@
 
 | Campo | Valor |
 |---|---|
-| Status | Rascunho |
+| Status | Aprovado (2026-11-11) |
 | Autor | João Paulo (via Claude) |
 | Data | 2026-11-11 |
-| SPEC | — (será a SPEC-009 depois da aprovação) |
+| SPEC | [SPEC-009](../spec/SPEC-009-movimento-e-acabamento.md) |
 | Origem | [PESQUISA-001](../research/PESQUISA-001-ux-e-concorrentes.md) |
 
 ## 1. Problema
@@ -154,7 +154,9 @@ Nada muda. A paleta de comandos e os menus mostram **só o que o papel da pessoa
 
 ## 9. Perguntas em aberto
 
-- [ ] **1. Recolher deve ser por pessoa?** Hoje, quando alguém recolhe um ramo, ele recolhe para **todos** que estão no documento. O Ayoa e outros fazem por pessoa. Proposta: manter como está neste PRD e decidir no PRD-012.
-- [ ] **2. Quanto tempo o "Desfazer" fica no aviso?** Proposta: 6 segundos, pausando enquanto o mouse estiver em cima.
-- [ ] **3. A partir de quantos blocos o "apagar ramo" guarda uma versão antes?** Proposta: 20 blocos ou mais. Abaixo disso, o `Ctrl+Z` basta.
-- [ ] **4. Alguém da equipe usa leitor de tela ou "reduzir movimento"?** Não muda o escopo, só a prioridade dos testes manuais.
+Respondidas na aprovação (2026-11-11): o dono aprovou o PRD sem responder às perguntas uma a uma, então valem as propostas.
+
+- [x] **1. Recolher por pessoa?** **Não, por enquanto.** Recolher continua valendo para todos; a decisão fica para o PRD-012. A busca (R6.22) é a exceção: ela revela o resultado só para quem busca.
+- [x] **2. Tempo do "Desfazer".** **6 segundos**, pausando enquanto o mouse ou o foco estiver no aviso.
+- [x] **3. Versão antes de apagar ramo.** A partir de **20 blocos**.
+- [x] **4. Leitor de tela ou "reduzir movimento" na equipe?** Sem resposta. Os dois modos são testados de qualquer jeito: o E2E roda com "reduzir movimento" ligado por padrão.
