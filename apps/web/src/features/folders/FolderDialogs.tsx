@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useState } from 'react';
 import { Button, ErrorText, Field, Input, Modal, Select, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 // Diálogos das pastas (SPEC-004 §5.2).
 
@@ -58,8 +59,8 @@ export function FolderDialog({ state, onClose }: { state: FolderDialogState | nu
               : undefined
           }
         >
-          {(id) => (
-            <Input id={id} autoFocus maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
+          {(id, aria) => (
+            <Input id={id} {...aria} autoFocus maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
           )}
         </Field>
         <ErrorText error={save.error} />
@@ -88,6 +89,7 @@ export function FolderMenuDialog({
   onMembers: () => void;
   onDeleted: () => void;
 }) {
+  const confirm = useConfirm();
   const qc = useQueryClient();
   const remove = useMutation({
     mutationFn: () => api(`/folders/${folder!.id}`, { method: 'DELETE' }),
@@ -118,10 +120,14 @@ export function FolderMenuDialog({
             <Button
               variant="danger"
               busy={remove.isPending}
-              onClick={() => {
-                if (window.confirm(`Apagar a pasta "${folder?.name}"? Os documentos continuam existindo.`)) {
-                  remove.mutate();
-                }
+              onClick={async () => {
+                const ok = await confirm({
+                  title: `Apagar a pasta "${folder?.name}"?`,
+                  body: 'Os documentos continuam existindo e voltam para "sem pasta".',
+                  confirmLabel: 'Apagar pasta',
+                  danger: true,
+                });
+                if (ok) remove.mutate();
               }}
             >
               Apagar pasta
@@ -190,9 +196,10 @@ export function FolderMembersDialog({ folder, onClose }: { folder: FolderNode | 
           >
             <div className="min-w-48 flex-1">
               <Field label="E-mail do colega">
-                {(id) => (
+                {(id, aria) => (
                   <Input
                     id={id}
+                    {...aria}
                     type="email"
                     value={email}
                     placeholder="colega@paglamp.com.br"

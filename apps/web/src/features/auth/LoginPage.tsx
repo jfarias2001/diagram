@@ -47,9 +47,10 @@ export function LoginPage() {
 
         <form onSubmit={submit} className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6 shadow-sm">
           <Field label="E-mail">
-            {(id) => (
+            {(id, aria) => (
               <Input
                 id={id}
+                {...aria}
                 type="email"
                 autoComplete="username"
                 required
@@ -60,9 +61,10 @@ export function LoginPage() {
             )}
           </Field>
           <Field label="Senha">
-            {(id) => (
+            {(id, aria) => (
               <Input
                 id={id}
+                {...aria}
                 type="password"
                 autoComplete="current-password"
                 required

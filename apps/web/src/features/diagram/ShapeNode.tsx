@@ -148,12 +148,14 @@ function ShapeTextEditor({ initial, onDone }: { initial: string; onDone: (text: 
       aria-label="Texto da forma"
       className="nodrag nopan h-full w-full resize-none bg-transparent text-center text-sm leading-snug outline-none"
       onChange={(e) => setValue(e.target.value)}
-      onBlur={() => finish(value)}
+      // O valor vem do próprio campo, não do estado: o estado pode estar um
+      // render atrás (texto guardado + Enter logo em seguida — SPEC-009).
+      onBlur={(e) => finish(e.currentTarget.value)}
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          finish(value);
+          finish(e.currentTarget.value);
         } else if (e.key === 'Escape') {
           e.preventDefault();
           finish(null);

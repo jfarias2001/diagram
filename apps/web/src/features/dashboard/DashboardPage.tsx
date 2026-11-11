@@ -33,6 +33,7 @@ import {
   FolderMenuDialog,
 } from '../folders/FolderDialogs';
 import { FolderBreadcrumb, findFolderPath, FolderSidebar, SEM_PASTA, useFolders } from '../folders/FolderSidebar';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 type Scope = 'mine' | 'shared' | 'trash';
 
@@ -389,6 +390,7 @@ function DocumentItem({
   onOpen: () => void;
 }) {
   const canEdit = doc.myRole === 'OWNER' || doc.myRole === 'EDITOR';
+  const confirm = useConfirm();
   const inTrash = scope === 'trash';
   const Icon = doc.type === 'MINDMAP' ? IconMindMap : IconFlow;
 
@@ -398,10 +400,14 @@ function DocumentItem({
         {
           label: 'Apagar de vez',
           danger: true,
-          run: () => {
-            if (window.confirm(`Apagar "${doc.title}" de vez? Não dá para desfazer.`)) {
-              onAction(`/documents/${doc.id}`, 'DELETE');
-            }
+          run: async () => {
+            const ok = await confirm({
+              title: `Apagar "${doc.title}" de vez?`,
+              body: 'O documento e todo o histórico dele são apagados. Não dá para desfazer.',
+              confirmLabel: 'Apagar de vez',
+              danger: true,
+            });
+            if (ok) onAction(`/documents/${doc.id}`, 'DELETE');
           },
         },
       ]
@@ -640,7 +646,7 @@ function CreateDialog({
           label="Título"
           hint={isDiagram ? 'O nome do fluxograma. Dá para mudar depois.' : 'Vira o tópico central do mapa. Dá para mudar depois.'}
         >
-          {(id) => <Input id={id} autoFocus maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />}
+          {(id, aria) => <Input id={id} {...aria} autoFocus maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />}
         </Field>
         <ErrorText error={create.error} />
         <div className="flex justify-end gap-2">
@@ -674,7 +680,7 @@ function RenameDialog({ doc, onClose, onDone }: { doc: DocumentSummary | null; o
         className="flex flex-col gap-4"
       >
         <Field label="Título">
-          {(id) => <Input id={id} autoFocus maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />}
+          {(id, aria) => <Input id={id} {...aria} autoFocus maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />}
         </Field>
         <ErrorText error={rename.error} />
         <div className="flex justify-end gap-2">

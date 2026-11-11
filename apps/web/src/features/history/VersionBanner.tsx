@@ -1,6 +1,7 @@
 import type { DocumentSummary, RestoreResult, VersionSummary } from '@diagram/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
+import { useConfirm } from '../../components/ConfirmDialog';
 import { Button, ErrorText } from '../../components/ui';
 import { api } from '../../lib/api';
 
@@ -22,6 +23,7 @@ export function VersionBanner({
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const confirm = useConfirm();
 
   const restore = useMutation({
     mutationFn: () =>
@@ -58,10 +60,13 @@ export function VersionBanner({
             variant="primary"
             busy={restore.isPending}
             disabled={!canSave}
-            onClick={() => {
-              if (window.confirm('Restaurar esta versão? O estado atual fica guardado como uma versão nova.')) {
-                restore.mutate();
-              }
+            onClick={async () => {
+              const ok = await confirm({
+                title: 'Restaurar esta versão?',
+                body: 'O estado atual fica guardado como uma versão nova — nada se perde.',
+                confirmLabel: 'Restaurar',
+              });
+              if (ok) restore.mutate();
             }}
           >
             Restaurar esta versão

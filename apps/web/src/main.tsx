@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, Navigate } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import { AppShell } from './components/AppShell';
+import { ConfirmProvider } from './components/ConfirmDialog';
+import { Toaster } from './components/Toast';
 import { Spinner } from './components/ui';
 import { UsersPage } from './features/admin/UsersPage';
 import { ChangePasswordPage } from './features/auth/ChangePasswordPage';
@@ -60,7 +62,10 @@ if (!rootElement) throw new Error('#root não encontrado');
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ConfirmProvider>
+        <RouterProvider router={router} />
+        <Toaster />
+      </ConfirmProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

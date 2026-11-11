@@ -47,18 +47,18 @@ export function ChangePasswordPage() {
         </div>
         <form onSubmit={submit} className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6 shadow-sm">
           <Field label={forced ? 'Senha provisória' : 'Senha atual'}>
-            {(id) => (
-              <Input id={id} type="password" autoComplete="current-password" required value={currentPassword} onChange={(e) => setCurrent(e.target.value)} />
+            {(id, aria) => (
+              <Input id={id} {...aria} type="password" autoComplete="current-password" required value={currentPassword} onChange={(e) => setCurrent(e.target.value)} />
             )}
           </Field>
           <Field label="Nova senha" hint={`Pelo menos ${PASSWORD_MIN} caracteres. Uma frase curta funciona bem.`}>
-            {(id) => (
-              <Input id={id} type="password" autoComplete="new-password" required value={newPassword} onChange={(e) => setNew(e.target.value)} />
+            {(id, aria) => (
+              <Input id={id} {...aria} type="password" autoComplete="new-password" required value={newPassword} onChange={(e) => setNew(e.target.value)} />
             )}
           </Field>
           <Field label="Confirme a nova senha">
-            {(id) => (
-              <Input id={id} type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+            {(id, aria) => (
+              <Input id={id} {...aria} type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
             )}
           </Field>
           <ErrorText error={localError ? new Error(localError) : change.error} />

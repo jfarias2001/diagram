@@ -269,8 +269,16 @@ function NodeEditor({
           finish(el.value + pending.slice(0, enter));
           return;
         }
-        if (pending) setValue((v) => v + pending);
-        requestAnimationFrame(() => el.setSelectionRange(el.value.length, el.value.length));
+        if (pending) {
+          // Escreve direto no campo, na hora: a próxima tecla já cai DENTRO dele
+          // e o onChange dela lê o valor com o que estava guardado. Com
+          // setValue(v => v + pending) havia uma corrida — a tecla seguinte
+          // chegava antes do re-render e apagava as primeiras letras.
+          const next = el.value + pending;
+          el.value = next;
+          setValue(next);
+        }
+        el.setSelectionRange(el.value.length, el.value.length);
       } else if (tries++ < 30) {
         frame = requestAnimationFrame(tryFocus);
       }
@@ -289,13 +297,15 @@ function NodeEditor({
       aria-label="Texto do nó"
       className="nodrag nopan block w-full min-w-[120px] flex-1 resize-none bg-transparent outline-none"
       onChange={(e) => setValue(e.target.value)}
-      onBlur={() => finish(value)}
+      // O valor vem do próprio campo, não do estado: o estado pode estar um
+      // render atrás (texto guardado + Enter logo em seguida — SPEC-009).
+      onBlur={(e) => finish(e.currentTarget.value)}
       onKeyDown={(e) => {
         // Atalhos do editor não disparam enquanto se digita.
         e.stopPropagation();
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          finish(value);
+          finish(e.currentTarget.value);
         } else if (e.key === 'Escape') {
           e.preventDefault();
           finish(null);

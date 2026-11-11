@@ -25,6 +25,8 @@ export default tseslint.config(
     rules: {
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
+      // SPEC-009 §5.4: confirmação e aviso são do próprio sistema, nunca do navegador.
+      'no-alert': 'error',
       // Texto do usuário nunca vira HTML (CLAUDE.md §9).
       'no-restricted-syntax': [
         'error',

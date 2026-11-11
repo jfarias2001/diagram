@@ -16,6 +16,9 @@ export default defineConfig({
     viewport: { width: 1360, height: 820 },
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
+    // SPEC-009 §7: "reduzir movimento" por padrão deixa os testes determinísticos;
+    // quem testa animação liga o movimento no próprio arquivo.
+    contextOptions: { reducedMotion: 'reduce' },
   },
   webServer: {
     command: 'npx tsx e2e/stack.ts',

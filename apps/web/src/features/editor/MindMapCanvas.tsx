@@ -31,7 +31,7 @@ import type * as Y from 'yjs';
 import type { BoardTheme } from './boardTheme';
 import { CanvasControls, FIT_VIEW_OPTIONS } from './CanvasControls';
 import { type MindEdgeData, MindEdge, type MindFlowEdge } from './MindEdge';
-import { offsetsForSoloMove, type PositionedNode, resolvePositions } from './layout';
+import { estimateSize, offsetsForSoloMove, type PositionedNode, resolvePositions } from './layout';
 import { type MindFlowNode, MindNode, type MindNodeData, PENDING_ENTER } from './MindNode';
 import { type NodeActions, NodeActionBar } from './NodeActionBar';
 import { stableData } from './stableData';
@@ -238,7 +238,19 @@ export function MindMapCanvas({
         // A raiz também arrasta (SPEC-006 §5.1): arrastá-la move o mapa inteiro.
         draggable: canEdit && editing?.id !== node.id && !rewire,
         zIndex: isDragging ? 10 : 0,
-        measured: measured.current.get(node.id),
+        // Bloco ainda não medido nasce com o tamanho ESTIMADO (como no
+        // fluxograma): o React Flow esconde nó sem medida, e um campo escondido
+        // não recebe foco — o que se digitava nesse intervalo se perdia
+        // (acento inclusive). A medida real substitui a estimativa logo depois.
+        measured:
+          measured.current.get(node.id) ??
+          estimateSize(
+            node.text,
+            node.parentId === null,
+            (node.note ? 1 : 0) + (node.link ? 1 : 0),
+            node.shape ?? theme.shape,
+            board.font.widthFactor,
+          ),
         data: stableData(dataCache.current, node.id, {
           text: node.text,
           side: pos.side,
@@ -306,6 +318,7 @@ export function MindMapCanvas({
     nodes,
     painted,
     theme,
+    board.font.widthFactor,
     drag,
     dragBranch,
     dragDelta,

@@ -102,12 +102,14 @@ function LabelEditor({ initial, onDone }: { initial: string; onDone: (label: str
       size={Math.max(4, value.length)}
       className="nodrag nopan rounded border border-brand bg-surface px-1.5 py-0.5 text-center text-xs text-ink outline-none"
       onChange={(e) => setValue(e.target.value)}
-      onBlur={() => finish(value)}
+      // O valor vem do próprio campo, não do estado: o estado pode estar um
+      // render atrás (texto guardado + Enter logo em seguida — SPEC-009).
+      onBlur={(e) => finish(e.currentTarget.value)}
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === 'Enter') {
           e.preventDefault();
-          finish(value);
+          finish(e.currentTarget.value);
         } else if (e.key === 'Escape') {
           e.preventDefault();
           finish(null);

@@ -7,6 +7,7 @@ import {
   useId,
   useRef,
 } from 'react';
+import { usePresence } from './usePresence';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -48,6 +49,10 @@ export function Spinner({ className = '' }: { className?: string }) {
   );
 }
 
+/**
+ * Rótulo + campo + dica/erro. O campo recebe `id` e as props de acessibilidade
+ * (`aria-describedby` aponta para a dica ou o erro; `aria-invalid` com erro).
+ */
 export function Field({
   label,
   hint,
@@ -57,19 +62,28 @@ export function Field({
   label: string;
   hint?: string;
   error?: string | null;
-  children: (id: string) => ReactNode;
+  children: (id: string, aria: { 'aria-describedby'?: string; 'aria-invalid'?: true }) => ReactNode;
 }) {
   const id = useId();
+  const noteId = `${id}-note`;
+  const aria = {
+    ...(error || hint ? { 'aria-describedby': noteId } : {}),
+    ...(error ? { 'aria-invalid': true as const } : {}),
+  };
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className="text-sm font-medium">
         {label}
       </label>
-      {children(id)}
+      {children(id, aria)}
       {error ? (
-        <p className="text-sm text-danger">{error}</p>
+        <p id={noteId} className="text-sm text-danger">
+          {error}
+        </p>
       ) : hint ? (
-        <p className="text-xs text-muted">{hint}</p>
+        <p id={noteId} className="text-xs text-muted">
+          {hint}
+        </p>
       ) : null}
     </div>
   );
@@ -89,43 +103,65 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={`${inputClass} shrink-0 pr-8 ${props.className ?? ''}`} />;
 }
 
-/** Modal nativo (<dialog>): foco preso, Esc fecha, acessível. */
+/**
+ * Modal nativo (<dialog>): foco preso, Esc fecha, acessível. Entra e sai com
+ * animação (SPEC-009 §5.2): ao fechar, o conteúdo continua desenhado — com o
+ * que tinha da última vez aberto — até a saída terminar, e só então o
+ * `dialog.close()` roda. Assim quem chamou pode limpar o próprio estado na hora.
+ */
 export function Modal({
   open,
   onClose,
   title,
   children,
   footer,
+  width = 440,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
   footer?: ReactNode;
+  width?: number;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const { mounted, state, onTransitionEnd } = usePresence(open);
+  const last = useRef({ title, children, footer });
+  if (open) last.current = { title, children, footer };
+  const shown = last.current;
+
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
+    if (mounted && !dialog.open) dialog.showModal();
+    if (!mounted && dialog.open) dialog.close();
+  }, [mounted]);
 
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      data-motion="modal"
+      data-state={state}
+      aria-labelledby={titleId}
+      onTransitionEnd={onTransitionEnd}
+      onClose={() => {
+        if (open) onClose();
+      }}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
       }}
-      className="m-auto w-[min(440px,calc(100vw-32px))] rounded-2xl border border-line bg-surface p-0 text-ink shadow-2xl"
+      style={{ width: `min(${width}px, calc(100vw - 32px))` }}
+      className="m-auto rounded-modal border border-line bg-surface p-0 text-ink shadow-modal"
     >
-      {open && (
+      {mounted && (
         <div className="flex flex-col gap-5 p-6">
-          <h2 className="font-display text-lg font-semibold">{title}</h2>
-          <div className="flex flex-col gap-4">{children}</div>
-          {footer && <div className="flex justify-end gap-2">{footer}</div>}
+          <h2 id={titleId} className="font-display text-lg font-semibold">
+            {shown.title}
+          </h2>
+          <div className="flex flex-col gap-4">{shown.children}</div>
+          {shown.footer && <div className="flex justify-end gap-2">{shown.footer}</div>}
         </div>
       )}
     </dialog>

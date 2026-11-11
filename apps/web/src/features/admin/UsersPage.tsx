@@ -4,12 +4,14 @@ import { type FormEvent, useState } from 'react';
 import { Button, ErrorText, Field, Input, Modal, relativeTime, Select, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
 import { useMe } from '../auth/session';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 const usersKey = ['admin-users'] as const;
 
 export function UsersPage() {
   const me = useMe().data;
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const [creating, setCreating] = useState(false);
   const [temp, setTemp] = useState<{ name: string; email: string; password: string } | null>(null);
 
@@ -102,10 +104,14 @@ export function UsersPage() {
                           variant="ghost"
                           className="h-8 text-xs"
                           disabled={!u.active}
-                          onClick={() => {
-                            if (window.confirm(`Gerar uma nova senha provisória para ${u.name}? A senha atual deixa de funcionar.`)) {
-                              reset.mutate(u);
-                            }
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: `Gerar nova senha para ${u.name}?`,
+                              body: 'A senha atual deixa de funcionar e a nova é exibida uma única vez.',
+                              confirmLabel: 'Gerar nova senha',
+                              danger: true,
+                            });
+                            if (ok) reset.mutate(u);
                           }}
                         >
                           Redefinir senha
@@ -173,14 +179,14 @@ function CreateUserDialog({
     <Modal open={open} onClose={onClose} title="Criar acesso">
       <form onSubmit={submit} className="flex flex-col gap-4">
         <Field label="Nome">
-          {(id) => <Input id={id} autoFocus required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />}
+          {(id, aria) => <Input id={id} {...aria} autoFocus required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />}
         </Field>
         <Field label="E-mail" hint="É o login da pessoa. Pode ser de qualquer provedor.">
-          {(id) => <Input id={id} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />}
+          {(id, aria) => <Input id={id} {...aria} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />}
         </Field>
         <Field label="Papel">
-          {(id) => (
-            <Select id={id} value={role} onChange={(e) => setRole(e.target.value as UserRole)} className="w-full">
+          {(id, aria) => (
+            <Select id={id} {...aria} value={role} onChange={(e) => setRole(e.target.value as UserRole)} className="w-full">
               <option value="MEMBER">Colaborador</option>
               <option value="ADMIN">Administrador (gerencia usuários)</option>
             </Select>

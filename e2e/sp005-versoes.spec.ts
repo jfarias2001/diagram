@@ -87,8 +87,11 @@ test('histórico: salvar versão com nome, visualizar e restaurar um ramo apagad
   await shot(admin, 'sp005-visualizando');
 
   // 4) Restaurar: o ramo volta e nasce a versão "Antes de restaurar…".
-  admin.once('dialog', (d) => d.accept());
+  // A confirmação é um diálogo do próprio sistema (SPEC-009 §5.4), com foco em Cancelar.
   await admin.getByRole('button', { name: 'Restaurar esta versão' }).click();
+  const confirm = admin.getByRole('dialog', { name: 'Restaurar esta versão?' });
+  await expect(confirm.getByRole('button', { name: 'Cancelar' })).toBeFocused();
+  await confirm.getByRole('button', { name: 'Restaurar', exact: true }).click();
   await expect(admin.getByText(/Você está vendo a versão de/)).toHaveCount(0);
   await expect(node(admin, 'Vagas abertas')).toBeVisible();
   await expect(aside.getByText(/^Antes de restaurar de /)).toBeVisible();

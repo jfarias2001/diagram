@@ -4,6 +4,7 @@ import { type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Avatar, Button, ErrorText, Input, Modal, Select, Spinner } from '../../components/ui';
 import { api } from '../../lib/api';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 const ROLE_LABEL: Record<Role, string> = {
   OWNER: 'Dono',
@@ -27,6 +28,7 @@ export function ShareDialog({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const key = ['members', documentId];
   const isOwner = myRole === 'OWNER';
@@ -144,8 +146,14 @@ export function ShareDialog({
         <Button
           variant="ghost"
           className="self-start text-danger"
-          onClick={() => {
-            if (window.confirm('Sair deste mapa? Você perde o acesso até ser convidado de novo.')) remove.mutate(myId);
+          onClick={async () => {
+            const ok = await confirm({
+              title: 'Sair deste documento?',
+              body: 'Você perde o acesso até ser convidado de novo.',
+              confirmLabel: 'Sair',
+              danger: true,
+            });
+            if (ok) remove.mutate(myId);
           }}
         >
           Sair deste mapa

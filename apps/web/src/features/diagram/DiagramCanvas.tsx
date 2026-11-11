@@ -44,6 +44,7 @@ import { QuickShapeMenu } from './QuickShapeMenu';
 import { EdgeSelectionBar, ShapeSelectionBar } from './SelectionBar';
 import { type ShapeFlowNode, ShapeNode, type ShapeNodeData } from './ShapeNode';
 import { ShapePalette } from './ShapePalette';
+import { toast } from '../../components/toastStore';
 
 
 const nodeTypes = { shape: ShapeNode };
@@ -294,7 +295,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
         moveShapes(doc, positions, LOCAL_ORIGIN); // uma transação = um Ctrl+Z
       }
     } catch {
-      window.alert('Não foi possível organizar agora.');
+      toast({ message: 'Não foi possível organizar agora. Tente de novo.', tone: 'error' });
     } finally {
       setOrganizing(false);
       focusCanvas();
