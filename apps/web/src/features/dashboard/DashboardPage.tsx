@@ -39,6 +39,7 @@ import { Menu } from '../../components/Menu';
 import { toast } from '../../components/toastStore';
 import { type MoveStep, undoMoveSteps } from './undoMove';
 import { CardsSkeleton, Deferred } from '../../components/Skeleton';
+import { withViewTransition } from '../../lib/viewTransition';
 
 type DocAction = 'trash' | 'restore' | 'delete' | 'duplicate';
 
@@ -314,7 +315,7 @@ export function DashboardPage() {
               title={label}
               aria-pressed={view === value}
               onClick={() => {
-                setView(value);
+                withViewTransition(() => setView(value));
                 writeView(value);
               }}
               className={`rounded-md p-1.5 transition ${
@@ -341,9 +342,10 @@ export function DashboardPage() {
               : 'flex flex-col divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface'
           }
         >
-          {items.map((doc) => (
+          {items.map((doc, index) => (
             <DocumentItem
               key={doc.id}
+              index={index}
               doc={doc}
               view={view}
               scope={scope}
@@ -351,7 +353,7 @@ export function DashboardPage() {
               onRename={() => setRenaming(doc)}
               onMove={() => setMovingDoc(doc)}
               onAction={(kind) => action.mutate({ doc, kind })}
-              onOpen={() => navigate(`/m/${doc.id}`)}
+              onOpen={() => navigate(`/m/${doc.id}`, { viewTransition: true })}
             />
           ))}
         </ul>
@@ -425,6 +427,7 @@ export function coverStyle(theme: ThemeId | null | undefined) {
 }
 
 function DocumentItem({
+  index,
   doc,
   view,
   scope,
@@ -434,6 +437,8 @@ function DocumentItem({
   onAction,
   onOpen,
 }: {
+  /** Posição na lista: a entrada é escalonada pelos 10 primeiros (SPEC-009 §5.5). */
+  index: number;
   doc: DocumentSummary;
   view: View;
   scope: Scope;
@@ -448,6 +453,7 @@ function DocumentItem({
   const confirm = useConfirm();
   const inTrash = scope === 'trash';
   const Icon = doc.type === 'MINDMAP' ? IconMindMap : IconFlow;
+  const stagger = { animationDelay: `${Math.min(index, 10) * 20}ms` };
 
   const actions: Array<{ label: string; run: () => void; danger?: boolean }> = inTrash
     ? [
@@ -496,7 +502,11 @@ function DocumentItem({
 
   if (view === 'list') {
     return (
-      <li {...dragProps} className="group flex items-center gap-3 px-4 py-3 transition hover:bg-surface-2">
+      <li
+        {...dragProps}
+        style={stagger}
+        className="group flex animate-slide-up items-center gap-3 px-4 py-3 transition-colors duration-(--dur-micro) hover:bg-surface-2"
+      >
         <span
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
           style={coverStyle(doc.theme)}
@@ -508,7 +518,7 @@ function DocumentItem({
           {inTrash ? (
             <span className="block truncate font-medium">{doc.title}</span>
           ) : (
-            <Link to={`/m/${doc.id}`} className="block truncate font-medium hover:underline">
+            <Link viewTransition to={`/m/${doc.id}`} className="block truncate font-medium hover:underline">
               {doc.title}
             </Link>
           )}
@@ -526,7 +536,8 @@ function DocumentItem({
   return (
     <li
       {...dragProps}
-      className="group flex flex-col overflow-hidden rounded-xl border border-line bg-surface transition hover:border-brand/40 hover:shadow-md"
+      style={stagger}
+      className="group flex animate-slide-up flex-col overflow-hidden rounded-xl border border-line bg-surface transition-[border-color,box-shadow,translate] duration-(--dur-fast) ease-out hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-pop"
     >
       <div className="relative flex h-24 items-center justify-center text-white/90" style={coverStyle(doc.theme)}>
         <Icon size={34} />
@@ -539,7 +550,7 @@ function DocumentItem({
           {inTrash ? (
             <span className="block truncate font-medium">{doc.title}</span>
           ) : (
-            <Link to={`/m/${doc.id}`} className="block truncate font-medium hover:underline">
+            <Link viewTransition to={`/m/${doc.id}`} className="block truncate font-medium hover:underline">
               {doc.title}
             </Link>
           )}

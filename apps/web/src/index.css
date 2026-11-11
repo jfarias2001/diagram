@@ -355,6 +355,13 @@ dialog[data-state='exit']::backdrop {
   opacity: 0;
 }
 
+/* Troca de tela e de visual (SPEC-009 §5.5): crossfade curto do navegador. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--dur-fast);
+  animation-timing-function: var(--ease-out);
+}
+
 /* Bloco que acabou de nascer no quadro (SPEC-009 §5.6.2). */
 .react-flow__node.node-born > * {
   animation: node-born var(--dur-fast) var(--ease-out) both;
