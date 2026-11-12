@@ -28,11 +28,11 @@ import {
   useReactFlow,
   ViewportPortal,
 } from '@xyflow/react';
-import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { type BoardTheme, mix } from '../editor/boardTheme';
 import { FIT_VIEW_OPTIONS } from '../editor/CanvasControls';
-import { stableData } from '../editor/stableData';
+import { stableData, stableItem } from '../editor/stableData';
 import { PresenceContext, usePresenceStore } from '../editor/presence';
 import { useRenderAll } from '../export/renderAll';
 import { AnimatedReactFlow } from '../editor/motion/AnimatedFlow';
@@ -52,6 +52,7 @@ import { type DiagramFlowEdge, FlowEdge, type FlowEdgeData } from './FlowEdge';
 import { QuickShapeMenu } from './QuickShapeMenu';
 import { EdgeSelectionBar, shapeMenuGroups, type ShapePopover, ShapeSelectionBar, type ShapeStyleActions } from './SelectionBar';
 import { type ShapeFlowNode, ShapeNode, type ShapeNodeData } from './ShapeNode';
+import { useStableHandler } from '../../lib/useStableHandler';
 import { ShapePalette } from './ShapePalette';
 import { toast } from '../../components/toastStore';
 
@@ -370,6 +371,9 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
   // ---------- nós e conectores do React Flow ----------
   const dataCache = useRef(new Map<string, ShapeNodeData>());
   const edgeDataCache = useRef(new Map<string, FlowEdgeData>());
+  // Objeto inteiro reaproveitado: no arrasto, só a forma movida muda.
+  const nodeObjCache = useRef(new Map<string, ShapeFlowNode>());
+  const edgeObjCache = useRef(new Map<string, DiagramFlowEdge>());
 
   const nodes = useMemo(() => {
     const selected = new Set(selection.shapes);
@@ -378,7 +382,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
       const d = draft[shape.id];
       const w = d?.w ?? shape.w;
       const h = d?.h ?? shape.h;
-      list.push({
+      list.push(stableItem(nodeObjCache.current, shape.id, {
         id: shape.id,
         type: 'shape',
         ...(hitClass.has(shape.id) ? { className: hitClass.get(shape.id) } : {}),
@@ -401,17 +405,21 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
           canEdit,
           onCommit: commitShapeText,
         }),
-      });
+      }));
+    }
+    if (nodeObjCache.current.size > list.length) {
+      const alive = new Set(list.map((n) => n.id));
+      for (const id of nodeObjCache.current.keys()) if (!alive.has(id)) nodeObjCache.current.delete(id);
     }
     return list;
   }, [diagram.shapes, draft, selection.shapes, canEdit, editing, commitShapeText, defaults, hitClass]);
 
   const edges = useMemo(() => {
     const selected = new Set(selection.edges);
-    return Object.values(diagram.edges).map<DiagramFlowEdge>((edge) => {
+    const list = Object.values(diagram.edges).map<DiagramFlowEdge>((edge) => {
       const color = edge.color ?? defaults.stroke;
       const marker = { type: MarkerType.ArrowClosed, color, ...ARROW_SIZE };
-      return {
+      return stableItem(edgeObjCache.current, edge.id, {
         id: edge.id,
         type: 'flow',
         ...(hitClass.has(edge.id) ? { className: hitClass.get(edge.id) } : {}),
@@ -434,8 +442,13 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
           onCommitLabel: commitEdgeLabel,
           onEditLabel: editEdgeLabel,
         }),
-      };
+      });
     });
+    if (edgeObjCache.current.size > list.length) {
+      const alive = new Set(list.map((e) => e.id));
+      for (const id of edgeObjCache.current.keys()) if (!alive.has(id)) edgeObjCache.current.delete(id);
+    }
+    return list;
   }, [diagram.edges, selection.edges, canEdit, editing, commitEdgeLabel, editEdgeLabel, defaults, hitClass]);
 
   // ---------- arrastar, redimensionar, conectar ----------
@@ -720,6 +733,52 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
     return out;
   });
 
+  // Identidade fixa: o React Flow repassa estes tratadores a cada forma e
+  // conector; uma função nova por render redesenhava o quadro inteiro a cada
+  // movimento do arrasto.
+  const handleReconnect = useStableHandler((oldEdge: DiagramFlowEdge, connection: Connection) => {
+    if (!canEdit) return;
+    newStep();
+    reconnectEdge(
+      doc,
+      oldEdge.id,
+      {
+        source: connection.source,
+        target: connection.target,
+        sourceHandle: (connection.sourceHandle as HandleSide) ?? 'bottom',
+        targetHandle: (connection.targetHandle as HandleSide) ?? 'top',
+      },
+      LOCAL_ORIGIN,
+    );
+  });
+  const handleNodeClick = useStableHandler((e: ReactMouseEvent, n: ShapeFlowNode) => {
+    // Ver SPEC-002 §5.8: o segundo clique de um duplo clique vem com detail >= 2.
+    if (canEdit && e.detail >= 2) {
+      setEditing({ kind: 'shape', id: n.id, draft: null });
+      return;
+    }
+    focusCanvas();
+  });
+  const handleNodeDoubleClick = useStableHandler((_: ReactMouseEvent, n: ShapeFlowNode) => {
+    if (canEdit) setEditing({ kind: 'shape', id: n.id, draft: null });
+  });
+  const handleEdgeClick = useStableHandler((_: ReactMouseEvent, edge: DiagramFlowEdge) => {
+    setSelection({ shapes: [], edges: [edge.id] });
+    focusCanvas();
+  });
+  const handleEdgeDoubleClick = useStableHandler((_: ReactMouseEvent, edge: DiagramFlowEdge) => {
+    if (canEdit) editEdgeLabel(edge.id);
+  });
+  const handlePaneClick = useStableHandler(() => {
+    setSelection({ shapes: [], edges: [] });
+    setQuickMenu(null);
+    focusCanvas();
+  });
+  const handleAnimatingChange = useCallback(
+    (on: boolean) => wrapperRef.current?.setAttribute('data-animating', String(on)),
+    [],
+  );
+
   return (
     <div className="flex h-full w-full">
       {canEdit && <ShapePalette onPick={addFromPalette} onDropShape={dropShape} />}
@@ -743,7 +802,7 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
           animate={Object.keys(draft).length === 0 && !!provider && !reducedMotion}
           hierarchy={false}
           minDistance={24}
-          onAnimatingChange={(on) => wrapperRef.current?.setAttribute('data-animating', String(on))}
+          onAnimatingChange={handleAnimatingChange}
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
@@ -769,40 +828,12 @@ export function DiagramCanvas({ doc, diagram, provider, canEdit, undo, onCheckpo
           onNodeDragStop={flushDraft}
           onConnect={onConnect}
           onConnectEnd={onConnectEnd}
-          onReconnect={(oldEdge, connection) => {
-            if (!canEdit) return;
-            newStep();
-            reconnectEdge(
-              doc,
-              oldEdge.id,
-              {
-                source: connection.source,
-                target: connection.target,
-                sourceHandle: (connection.sourceHandle as HandleSide) ?? 'bottom',
-                targetHandle: (connection.targetHandle as HandleSide) ?? 'top',
-              },
-              LOCAL_ORIGIN,
-            );
-          }}
-          onNodeClick={(e, n) => {
-            // Ver SPEC-002 §5.8: o segundo clique de um duplo clique vem com detail >= 2.
-            if (canEdit && e.detail >= 2) {
-              setEditing({ kind: 'shape', id: n.id, draft: null });
-              return;
-            }
-            focusCanvas();
-          }}
-          onNodeDoubleClick={(_, n) => canEdit && setEditing({ kind: 'shape', id: n.id, draft: null })}
-          onEdgeClick={(_, edge) => {
-            setSelection({ shapes: [], edges: [edge.id] });
-            focusCanvas();
-          }}
-          onEdgeDoubleClick={(_, edge) => canEdit && editEdgeLabel(edge.id)}
-          onPaneClick={() => {
-            setSelection({ shapes: [], edges: [] });
-            setQuickMenu(null);
-            focusCanvas();
-          }}
+          onReconnect={handleReconnect}
+          onNodeClick={handleNodeClick}
+          onNodeDoubleClick={handleNodeDoubleClick}
+          onEdgeClick={handleEdgeClick}
+          onEdgeDoubleClick={handleEdgeDoubleClick}
+          onPaneClick={handlePaneClick}
           fitView
           fitViewOptions={FIT_VIEW_OPTIONS}
           minZoom={0.1}

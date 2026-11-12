@@ -1,5 +1,5 @@
 import { Panel, useReactFlow } from '@xyflow/react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { memo, type ReactNode, useEffect, useState } from 'react';
 import type * as Y from 'yjs';
 import { IconFit, IconRedo, IconTidy, IconUndo, IconZoomIn, IconZoomOut } from '../../components/icons';
 import { DUR, motionMs } from '../../lib/motion';
@@ -27,7 +27,7 @@ function useUndoState(undo: Y.UndoManager | null) {
   return state;
 }
 
-export function CanvasControls({
+function CanvasControlsComponent({
   undo,
   canEdit,
   onAfter,
@@ -82,6 +82,9 @@ export function CanvasControls({
     </Panel>
   );
 }
+
+/** Memorizado: o quadro re-renderiza a cada movimento do arrasto, os controles não precisam. */
+export const CanvasControls = memo(CanvasControlsComponent);
 
 function ControlButton({
   label,

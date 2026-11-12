@@ -7,6 +7,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
@@ -73,6 +74,19 @@ export function Menu({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+  // Sem espaço embaixo (último item da lista, fim da página): abre para cima.
+  const [flipped, setFlipped] = useState(false);
+  useLayoutEffect(() => {
+    if (!open || !mounted) return;
+    const trigger = triggerRef.current?.getBoundingClientRect();
+    const height = listRef.current?.offsetHeight ?? 0;
+    if (!trigger || !height) return;
+    const below = window.innerHeight - trigger.bottom;
+    const above = trigger.top;
+    const wantsDown = placement.startsWith('bottom');
+    const need = height + 8;
+    setFlipped(wantsDown ? below < need && above > below : above < need && below > above);
+  }, [open, mounted, placement]);
 
   const enabled = () =>
     Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
@@ -116,7 +130,10 @@ export function Menu({
     e.stopPropagation();
   };
 
-  const place = PLACEMENT[placement];
+  const effective: MenuPlacement = flipped
+    ? (`${placement.startsWith('bottom') ? 'top' : 'bottom'}-${placement.split('-')[1]}` as MenuPlacement)
+    : placement;
+  const place = PLACEMENT[effective];
 
   return (
     <div

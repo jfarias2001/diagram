@@ -25,10 +25,37 @@
 
 ## Estado atual (atualize a cada entrada)
 
-- **Fase:** SPEC-001 a 009 **todas implementadas e testadas** (491 testes de unidade/integração + 26 E2E); ainda não publicadas na VPS.
+- **Fase:** SPEC-001 a 009 **todas implementadas e testadas** (495 testes de unidade/integração + 26 E2E); ainda não publicadas na VPS.
 - **Em produção:** nada ainda.
 - **Repositório:** https://github.com/jfarias2001/diagram (branch `main`; push automático a cada atualização — CLAUDE.md §5 etapa 6).
 - **Próximo passo:** escolher a próxima onda do roteiro da [PESQUISA-001](docs/research/PESQUISA-001-ux-e-concorrentes.md) §5 (sugestão: PRD-010, conteúdo rico no bloco); em paralelo, primeiro deploy na VPS e PRD de backup do banco.
+
+---
+
+## 2026-11-12 — Arrasto travando no mapa e menu do cartão cortado
+**Tipo:** fix
+**Refs:** — (correção localizada; SPEC-002 §5.4 e SPEC-009 §5.3 como contexto)
+
+**O que mudou**
+- **Linha "em câmera lenta" ao arrastar um bloco.** A cada movimento do mouse, o React Flow redesenhava **todos** os blocos e ligações, não só o arrastado. Medido com Playwright (22 blocos, CPU 4x mais lenta): quadros de 300–500 ms antes, ~100 ms depois; no perfil, os blocos e ligações parados saíram da lista de quem redesenha. Duas causas:
+  - `onNodeClick`, `onEdgeClick` etc. eram funções novas a cada render, e o React Flow as repassa a cada nó e ligação. Agora têm identidade fixa (`lib/useStableHandler.ts`).
+  - O objeto de cada nó/ligação era recriado em todo render. Agora é reaproveitado quando nada mudou (`stableItem`, com 4 testes novos).
+  - O mesmo valeu para o **fluxograma** (`DiagramCanvas`). Os controles do canto (`CanvasControls`) passaram a ser memorizados.
+- **Menu "⋯" do cartão no painel aparecia cortado.** O cartão tinha `overflow-hidden` e o menu ficava atrás do cartão de baixo. Agora o cartão deixa o menu sair e fica por cima enquanto o menu está aberto. A capa mantém os cantos arredondados.
+- **Lista:** o menu da última linha também era cortado. Saiu o `overflow-hidden` e o `Menu` passou a **abrir para cima** quando não há espaço embaixo.
+
+**Revisão de segurança**
+- Checklist CLAUDE.md §9 revisada no que mudou: só frontend, nada em `apps/api` nem `packages/shared`.
+  - **Autorização:** nenhuma rota nova. Os tratadores estáveis chamam as mesmas ações de antes, com as mesmas checagens de `canEdit`; quem decide continua sendo o servidor.
+  - **XSS:** nenhum `dangerouslySetInnerHTML`. Textos continuam renderizados como texto.
+  - **CSP:** nada novo; só classes CSS.
+  - **Segredos:** `git status` conferido.
+- `pnpm audit --prod`: **sem vulnerabilidades**. Nenhuma dependência nova.
+- Checks: typecheck, lint, 495 testes de unidade/integração, build e **26 E2E** verdes.
+
+**Pendências / próximos passos**
+- [ ] O arrasto ainda re-renderiza o `MindMapCanvas` a cada movimento (o desenho vem do estado `drag`). Com mapas de 1.000+ blocos, vale levar a posição do arrasto para dentro do React Flow (follow-up, se aparecer lentidão).
+- [ ] O banco local de dev ficou com um usuário de teste (`teste-claude@local.test`) e alguns mapas "Drag test", criados para reproduzir o bug. Pode desativar pelo painel de usuários.
 
 ---
 

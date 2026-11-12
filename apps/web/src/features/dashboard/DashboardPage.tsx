@@ -362,7 +362,7 @@ export function DashboardPage() {
           className={
             view === 'grid'
               ? 'grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3'
-              : 'flex flex-col divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface'
+              : 'flex flex-col divide-y divide-line rounded-xl border border-line bg-surface'
           }
         >
           {items.map((doc, index) => (
@@ -528,7 +528,7 @@ function DocumentItem({
       <li
         {...dragProps}
         style={stagger}
-        className="group flex animate-slide-up items-center gap-3 px-4 py-3 transition-colors duration-(--dur-micro) hover:bg-surface-2"
+        className="group relative flex animate-slide-up items-center gap-3 px-4 py-3 transition-colors duration-(--dur-micro) first:rounded-t-[inherit] last:rounded-b-[inherit] hover:bg-surface-2 has-[[aria-expanded=true]]:z-20"
       >
         <span
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
@@ -560,9 +560,9 @@ function DocumentItem({
     <li
       {...dragProps}
       style={stagger}
-      className="group flex animate-slide-up flex-col overflow-hidden rounded-xl border border-line bg-surface transition-[border-color,box-shadow,translate] duration-(--dur-fast) ease-out hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-pop"
+      className="group relative flex animate-slide-up flex-col rounded-xl border border-line bg-surface transition-[border-color,box-shadow,translate] duration-(--dur-fast) ease-out hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-pop has-[[aria-expanded=true]]:z-20"
     >
-      <div className="relative flex h-24 items-center justify-center text-white/90" style={coverStyle(doc.theme)}>
+      <div className="relative flex h-24 items-center justify-center rounded-t-[calc(var(--radius-xl)-1px)] text-white/90" style={coverStyle(doc.theme)}>
         <Icon size={34} />
         <span className="absolute top-2 left-2 rounded-md bg-black/25 px-2 py-0.5 text-2xs font-medium backdrop-blur">
           {TYPE_LABEL[doc.type]}

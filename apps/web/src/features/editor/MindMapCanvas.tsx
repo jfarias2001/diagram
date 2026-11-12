@@ -25,7 +25,7 @@ import {
   Panel,
   useReactFlow,
 } from '@xyflow/react';
-import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, type MouseEvent as ReactMouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import type { BoardTheme } from './boardTheme';
 import { CanvasControls, FIT_VIEW_OPTIONS } from './CanvasControls';
@@ -36,12 +36,13 @@ import { type MenuContext, mindMenuGroups, type NodeActions, NodeActionBar, type
 import { useCommands } from '../../components/CommandPalette';
 import type { Command } from '../../components/commands';
 import { IconFit, IconSearch, IconTidy } from '../../components/icons';
-import { stableData } from './stableData';
+import { stableData, stableItem } from './stableData';
 import { edgeWidthForDepth } from './taper';
 import { useRenderAll } from '../export/renderAll';
 import { DUR, motionMs, useReducedMotion } from '../../lib/motion';
 import { panToReveal } from './motion/camera';
 import { AnimatedReactFlow } from './motion/AnimatedFlow';
+import { useStableHandler } from '../../lib/useStableHandler';
 import { MapSearch } from './MapSearch';
 import { PresenceContext, usePresenceStore } from './presence';
 import { MAX_HITS, searchNodes, withLocalExpand } from './search';
@@ -238,6 +239,11 @@ export function MindMapCanvas({
   }, [view, index]);
   const dataCache = useRef(new Map<string, MindNodeData>());
   const edgeCache = useRef(new Map<string, MindEdgeData>());
+  // O nó/ligação inteiro também é reaproveitado: no arrasto, só o bloco
+  // arrastado (e a linha dele) muda de objeto — o React Flow não redesenha o
+  // mapa todo a cada movimento do mouse.
+  const nodeObjCache = useRef(new Map<string, MindFlowNode>());
+  const edgeObjCache = useRef(new Map<string, MindFlowEdge>());
   // Tamanho medido de cada nó. Sem ele, cada objeto de nó novo chega ao React Flow
   // "não medido" e o nó fica escondido até ser medido de novo — um clique nesse
   // intervalo atravessa o nó e todos os nós são re-medidos a cada mudança.
@@ -279,7 +285,7 @@ export function MindMapCanvas({
       // (como na referência do MindMeister).
       const themeFill = theme.filledBranches && depth <= 1 ? color : null;
       const fill = node.fill ?? themeFill;
-      flowNodes.push({
+      flowNodes.push(stableItem(nodeObjCache.current, node.id, {
         id: node.id,
         type: 'mind',
         ...(hitClass.has(node.id) ? { className: hitClass.get(node.id) } : {}),
@@ -327,42 +333,45 @@ export function MindMapCanvas({
           onOpenNote: onOpenNoteStable,
           onToggleCollapse,
         }),
-      });
+      }));
       // A ligação continua desenhada enquanto se arrasta (SPEC-007 §5.1): ela
       // estica junto com o bloco, em vez de sumir.
       if (node.parentId) {
         const left = pos.side === 'left';
-        flowEdges.push({
-          id: `${node.parentId}->${node.id}`,
+        const edgeId = `${node.parentId}->${node.id}`;
+        flowEdges.push(stableItem(edgeObjCache.current, edgeId, {
+          id: edgeId,
           source: node.parentId,
           target: node.id,
           sourceHandle: left ? 's-l' : 's-r',
           targetHandle: left ? 't-r' : 't-l',
           type: 'mind',
-          selected: selectedEdge === `${node.parentId}->${node.id}`,
+          selected: selectedEdge === edgeId,
           zIndex: 0,
-          data: stableData(edgeCache.current, `${node.parentId}->${node.id}`, {
+          data: stableData(edgeCache.current, edgeId, {
             color,
             width: edgeWidthForDepth(theme.edge.width, depth),
             taper: theme.edge.taper,
             canCut: canEdit && !rewire,
             onCut: onCutEdge,
           }),
-        });
+        }));
       }
     }
     // Nós que sumiram saem do cache.
-    if (dataCache.current.size > flowNodes.length) {
+    if (dataCache.current.size > flowNodes.length || nodeObjCache.current.size > flowNodes.length) {
       const alive = new Set(flowNodes.map((n) => n.id));
       for (const id of dataCache.current.keys()) {
         if (alive.has(id)) continue;
         dataCache.current.delete(id);
         measured.current.delete(id);
       }
+      for (const id of nodeObjCache.current.keys()) if (!alive.has(id)) nodeObjCache.current.delete(id);
     }
-    if (edgeCache.current.size > flowEdges.length) {
+    if (edgeCache.current.size > flowEdges.length || edgeObjCache.current.size > flowEdges.length) {
       const alive = new Set(flowEdges.map((e) => e.id));
       for (const id of edgeCache.current.keys()) if (!alive.has(id)) edgeCache.current.delete(id);
+      for (const id of edgeObjCache.current.keys()) if (!alive.has(id)) edgeObjCache.current.delete(id);
     }
     return { flowNodes, flowEdges };
   }, [
@@ -798,6 +807,58 @@ export function MindMapCanvas({
     return out;
   });
 
+  // Tratadores com identidade fixa: o React Flow os repassa a cada nó e
+  // ligação, e uma função nova por render redesenhava o mapa inteiro a cada
+  // movimento do mouse no arrasto (a linha andava "em câmera lenta").
+  const handleNodeClick = useStableHandler((e: ReactMouseEvent, n: MindFlowNode) => {
+    if (rewire) {
+      finishRewire(n.id);
+      return;
+    }
+    // `detail >= 2` é o segundo clique de um duplo clique, segundo o próprio
+    // navegador. O evento `dblclick` sozinho não basta: quando o primeiro
+    // clique troca a seleção, ele pode ir para o fundo (SPEC-002 §5.8).
+    if (canEdit && e.detail >= 2) {
+      onSelect(n.id);
+      setEditing({ id: n.id, draft: null });
+      return;
+    }
+    setSelectedEdge(null);
+    onSelect(n.id);
+    focusCanvas();
+  });
+  const handleNodeDoubleClick = useStableHandler((_: ReactMouseEvent, n: MindFlowNode) => {
+    if (canEdit && !rewire) setEditing({ id: n.id, draft: null });
+  });
+  const handleEdgeClick = useStableHandler((_: ReactMouseEvent, edge: MindFlowEdge) => {
+    if (rewire) return;
+    setSelectedEdge((current) => (current === edge.id ? null : edge.id));
+    onSelect(null);
+    focusCanvas();
+  });
+  const handleNodeDragStart = useStableHandler((_: unknown, n: MindFlowNode) => {
+    setSelectedEdge(null);
+    onSelect(n.id);
+  });
+  const handleNodeDrag = useStableHandler((e: { shiftKey?: boolean }, n: MindFlowNode) =>
+    setDrag({ id: n.id, x: n.position.x, y: n.position.y, target: dropTargetOf(n), branch: withBranch(e) }),
+  );
+  const handleNodeDragStop = useStableHandler(onNodeDragStop);
+  const handlePaneClick = useStableHandler(() => {
+    setRewire(null);
+    setSelectedEdge(null);
+    onSelect(null);
+    focusCanvas();
+  });
+  const handleTidy = useStableHandler(() => {
+    const root = findRoot(nodes);
+    if (root) actions.tidy(root.id);
+  });
+  const handleAnimatingChange = useCallback(
+    (on: boolean) => wrapperRef.current?.setAttribute('data-animating', String(on)),
+    [],
+  );
+
   return (
     <div
       ref={wrapperRef}
@@ -812,7 +873,7 @@ export function MindMapCanvas({
         // anima durante o arrasto, no modo versão ou com "reduzir movimento".
         animate={!drag && !!provider && !reducedMotion}
         hierarchy
-        onAnimatingChange={(on) => wrapperRef.current?.setAttribute('data-animating', String(on))}
+        onAnimatingChange={handleAnimatingChange}
         nodes={flow.flowNodes}
         edges={flow.flowEdges}
         nodeTypes={nodeTypes}
@@ -822,46 +883,15 @@ export function MindMapCanvas({
         deleteKeyCode={null}
         selectionKeyCode={null}
         multiSelectionKeyCode={null}
-        onNodeClick={(e, n) => {
-          if (rewire) {
-            finishRewire(n.id);
-            return;
-          }
-          // `detail >= 2` é o segundo clique de um duplo clique, segundo o próprio
-          // navegador. O evento `dblclick` sozinho não basta: quando o primeiro
-          // clique troca a seleção, ele pode ir para o fundo (SPEC-002 §5.8).
-          if (canEdit && e.detail >= 2) {
-            onSelect(n.id);
-            setEditing({ id: n.id, draft: null });
-            return;
-          }
-          setSelectedEdge(null);
-          onSelect(n.id);
-          focusCanvas();
-        }}
-        onNodeDoubleClick={(_, n) => canEdit && !rewire && setEditing({ id: n.id, draft: null })}
-        onEdgeClick={(_, edge) => {
-          if (rewire) return;
-          setSelectedEdge((current) => (current === edge.id ? null : edge.id));
-          onSelect(null);
-          focusCanvas();
-        }}
+        onNodeClick={handleNodeClick}
+        onNodeDoubleClick={handleNodeDoubleClick}
+        onEdgeClick={handleEdgeClick}
         zoomOnDoubleClick={false}
-        onNodeDragStart={(_, n) => {
-          setSelectedEdge(null);
-          onSelect(n.id);
-        }}
-        onNodeDrag={(e, n) =>
-          setDrag({ id: n.id, x: n.position.x, y: n.position.y, target: dropTargetOf(n), branch: withBranch(e) })
-        }
-        onNodeDragStop={onNodeDragStop}
+        onNodeDragStart={handleNodeDragStart}
+        onNodeDrag={handleNodeDrag}
+        onNodeDragStop={handleNodeDragStop}
         onNodesChange={onNodesChange}
-        onPaneClick={() => {
-          setRewire(null);
-          setSelectedEdge(null);
-          onSelect(null);
-          focusCanvas();
-        }}
+        onPaneClick={handlePaneClick}
         // Só o que está na tela é desenhado (SPEC-009 §5.8) — exceto na exportação.
         onlyRenderVisibleElements={!renderAll}
         fitView
@@ -874,10 +904,7 @@ export function MindMapCanvas({
           undo={undo}
           canEdit={canEdit}
           onAfter={focusCanvas}
-          onTidy={() => {
-            const root = findRoot(nodes);
-            if (root) actions.tidy(root.id);
-          }}
+          onTidy={handleTidy}
           canTidy={hasManualPositions}
         />
         {search && (
